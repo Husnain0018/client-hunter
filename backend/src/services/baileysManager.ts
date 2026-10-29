@@ -17,7 +17,7 @@ import type {
   BaileysStatusInfo,
   WhatsAppStatus,
 } from '../types/domain.js';
-import { useSqliteAuthState } from './baileysAuthState.js';
+import { hasSavedSession, initPersistentAuthState } from './baileysAuthState.js';
 
 const pinoLogger = pino({ level: process.env.BAILEYS_LOG_LEVEL || 'warn' });
 
@@ -53,7 +53,7 @@ export class BaileysManager {
 
   constructor(private readonly db: Database) {
     this.events.setMaxListeners(100);
-    if (this.db.hasBaileysAuth()) {
+    if (hasSavedSession()) {
       this.state = 'disconnected';
     }
   }
@@ -101,12 +101,12 @@ export class BaileysManager {
 
     this.intentionalDisconnect = false;
     this.error = null;
-    this.state = this.db.hasBaileysAuth() ? 'connecting' : 'initializing';
+    this.state = hasSavedSession() ? 'connecting' : 'initializing';
     this.emitStatus();
 
     this.connectingPromise = (async () => {
       try {
-        const { state, saveCreds, clearAuthState } = useSqliteAuthState(this.db);
+        const { state, saveCreds, clearAuthState } = await initPersistentAuthState();
         this.clearAuthFn = clearAuthState;
 
         // Clean up any stale socket

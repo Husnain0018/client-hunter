@@ -1,3 +1,4 @@
+import '@whiskeysockets/baileys';
 import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import helmet from '@fastify/helmet';
@@ -10,10 +11,11 @@ import { clientHandlerRoutes } from './routes/clientHandler.js';
 import { whatsappRoutes } from './routes/whatsappRoutes.js';
 import { RunPipeline } from './services/runPipeline.js';
 import { BaileysManager } from './services/baileysManager.js';
+import { hasSavedSession } from './services/baileysAuthState.js';
 
-export function buildApp() {
+export function buildApp(customDatabase?: Database) {
   const app = Fastify({ logger: env.NODE_ENV !== 'test', bodyLimit: 250_000 });
-  const database = new Database(env.databasePath);
+  const database = customDatabase || new Database(env.databasePath);
   const pipeline = new RunPipeline(database);
   app.register(helmet, { global: true, contentSecurityPolicy: false });
   app.register(cors, {
@@ -59,13 +61,13 @@ process.on('unhandledRejection', (reason) => {
 });
 
 if (process.env.NODE_ENV !== 'test') {
-  const app = buildApp();
+  const database = new Database(env.databasePath);
+  const app = buildApp(database);
   app.listen({ host: env.HOST, port: env.PORT }).then(() => {
     app.log.info(`Client Hunter backend listening on http://${env.HOST}:${env.PORT}`);
 
-    // Auto-resume saved WhatsApp session if credentials exist in database
-    const database = new Database(env.databasePath);
-    if (database.hasBaileysAuth()) {
+    // Auto-resume saved WhatsApp session if credentials exist
+    if (hasSavedSession()) {
       app.log.info('Found existing WhatsApp session, reconnecting in background...');
       BaileysManager.getInstance(database).connect().catch((err) => {
         app.log.warn({ err }, 'Background WhatsApp reconnection encountered an error');

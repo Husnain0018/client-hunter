@@ -1,98 +1,54 @@
+import fs from 'node:fs';
+import path from 'node:path';
 import {
-  BufferJSON,
-  initAuthCreds,
-  type AuthenticationCreds,
+  useMultiFileAuthState,
   type AuthenticationState,
-  type SignalKeyStore,
 } from '@whiskeysockets/baileys';
-import type { Database } from '../db/database.js';
+import { env } from '../config/env.js';
 
-export interface SqliteAuthStateResult {
+export interface PersistentAuthStateResult {
   state: AuthenticationState;
   saveCreds: () => Promise<void>;
   clearAuthState: () => void;
+  hasSavedAuth: () => boolean;
 }
 
-/**
- * Creates a Baileys AuthenticationState adapter backed by the existing SQLite database.
- * Uses Baileys BufferJSON replacer/reviver for lossless Buffer serialization.
- * Transactions in SQLite ensure atomic key storage without file-locking or corruption risks.
- */
-export function useSqliteAuthState(db: Database): SqliteAuthStateResult {
-  // 1. Initialize or load root credentials
-  const rawCreds = db.getBaileysAuth('creds');
-  let creds: AuthenticationCreds;
-
-  if (rawCreds) {
-    try {
-      creds = JSON.parse(rawCreds, BufferJSON.reviver);
-    } catch {
-      creds = initAuthCreds();
-    }
+export function getSessionDirPath(): string {
+  const sessionDir = path.resolve(process.cwd(), env.BAILEYS_SESSION_DIR || './data/baileys_auth');
+  if (!fs.existsSync(sessionDir)) {
+    fs.mkdirSync(sessionDir, { recursive: true, mode: 0o700 });
   } else {
-    creds = initAuthCreds();
+    try {
+      fs.chmodSync(sessionDir, 0o700);
+    } catch {
+      // ignore
+    }
   }
+  return sessionDir;
+}
 
-  // 2. Signal key store implementation
-  const keys: SignalKeyStore = {
-    get: async (type, ids) => {
-      const data: Record<string, unknown> = {};
-      const keyIds = ids.map((id) => `${type}-${id}`);
-      const rows = db.getBaileysAuthMultiple(keyIds);
+export function hasSavedSession(): boolean {
+  const sessionDir = getSessionDirPath();
+  return fs.existsSync(path.join(sessionDir, 'creds.json'));
+}
 
-      for (const row of rows) {
-        try {
-          const id = row.key_id.slice(type.length + 1);
-          data[id] = JSON.parse(row.value_json, BufferJSON.reviver);
-        } catch {
-          // ignore corrupted or unparseable keys
-        }
-      }
-
-      return data as any;
-    },
-
-    set: async (dataset: any) => {
-      const toUpsert: Array<{ keyId: string; valueJson: string }> = [];
-      const toDelete: string[] = [];
-
-      for (const type in dataset) {
-        const typeData = dataset[type];
-        if (!typeData) continue;
-        for (const id in typeData) {
-          const value = typeData[id];
-          const keyId = `${type}-${id}`;
-          if (value) {
-            toUpsert.push({ keyId, valueJson: JSON.stringify(value, BufferJSON.replacer) });
-          } else {
-            toDelete.push(keyId);
-          }
-        }
-      }
-
-      if (toUpsert.length > 0) {
-        db.setBaileysAuthBatch(toUpsert);
-      }
-      if (toDelete.length > 0) {
-        db.deleteBaileysAuthBatch(toDelete);
-      }
-    },
-
-    clear: async () => {
-      db.clearBaileysAuth();
-    },
-  };
+export async function initPersistentAuthState(): Promise<PersistentAuthStateResult> {
+  const sessionDir = getSessionDirPath();
+  const { state, saveCreds } = await useMultiFileAuthState(sessionDir);
 
   return {
-    state: {
-      creds,
-      keys,
-    },
-    saveCreds: async () => {
-      db.setBaileysAuth('creds', JSON.stringify(creds, BufferJSON.replacer));
-    },
+    state,
+    saveCreds,
     clearAuthState: () => {
-      db.clearBaileysAuth();
+      try {
+        if (fs.existsSync(sessionDir)) {
+          fs.rmSync(sessionDir, { recursive: true, force: true });
+          fs.mkdirSync(sessionDir, { recursive: true, mode: 0o700 });
+        }
+      } catch (err) {
+        console.error('Failed to clear Baileys session directory:', err);
+      }
     },
+    hasSavedAuth: () => fs.existsSync(path.join(sessionDir, 'creds.json')),
   };
 }

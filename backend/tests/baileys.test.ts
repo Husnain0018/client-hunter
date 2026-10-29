@@ -1,6 +1,6 @@
 import { afterAll, describe, expect, it } from 'vitest';
 import { Database } from '../src/db/database.js';
-import { useSqliteAuthState } from '../src/services/baileysAuthState.js';
+import { hasSavedSession, initPersistentAuthState } from '../src/services/baileysAuthState.js';
 import { BaileysManager } from '../src/services/baileysManager.js';
 import { ClientHandlerService } from '../src/services/clientHandlerService.js';
 import { buildApp } from '../src/server.js';
@@ -62,17 +62,18 @@ describe('Baileys WhatsApp Direct Integration Suite', () => {
     gmailThreadId: '',
   };
 
-  it('1. Persists, serializes, and restores Baileys authentication state via SQLite', async () => {
-    expect(db.hasBaileysAuth()).toBe(false);
+  it('1. Persists, serializes, and restores Baileys authentication state', async () => {
+    const auth1 = await initPersistentAuthState();
+    auth1.clearAuthState();
+    expect(hasSavedSession()).toBe(false);
 
-    const auth1 = useSqliteAuthState(db);
     expect(auth1.state.creds).toBeDefined();
     expect(auth1.state.creds.noiseKey).toBeDefined();
     expect(Buffer.isBuffer(auth1.state.creds.noiseKey.private)).toBe(true);
 
     // Save creds
     await auth1.saveCreds();
-    expect(db.hasBaileysAuth()).toBe(true);
+    expect(hasSavedSession()).toBe(true);
 
     // Save cryptographic signal keys
     const dummyKey = { key: Buffer.from('baileys-crypto-test-secret-key-1234') };
@@ -82,8 +83,8 @@ describe('Baileys WhatsApp Direct Integration Suite', () => {
       },
     });
 
-    // Simulate server restart by creating new auth state instance from the same DB
-    const auth2 = useSqliteAuthState(db);
+    // Simulate server restart by creating new auth state instance
+    const auth2 = await initPersistentAuthState();
     expect(auth2.state.creds.noiseKey.private.equals(auth1.state.creds.noiseKey.private)).toBe(true);
 
     const retrievedKeys = await auth2.state.keys.get('pre-key', ['101']);
@@ -93,7 +94,7 @@ describe('Baileys WhatsApp Direct Integration Suite', () => {
 
     // Clean session on logout
     auth2.clearAuthState();
-    expect(db.hasBaileysAuth()).toBe(false);
+    expect(hasSavedSession()).toBe(false);
   });
 
   it('2. Maintains singleton connection state and prevents conflicting concurrent connects', async () => {
