@@ -6,7 +6,7 @@ import { Database } from '../db/database.js';
 import { RunPipeline } from '../services/runPipeline.js';
 import { sendEmail, EmailNotConfiguredError } from '../services/emailService.js';
 import { connectSheet } from '../services/googleSheetsSync.js';
-import { parseAck, sendWhatsApp, verifyWebhookSecret, WahaNotConfiguredError } from '../services/wahaService.js';
+import { BaileysManager } from '../services/baileysManager.js';
 
 const requestSchema = z.object({
   userName: z.string().trim().min(1).max(120),
@@ -161,16 +161,16 @@ export async function apiRoutes(app: FastifyInstance, options: ApiRouteOptions):
     const reservation = database.reserveWhatsApp({ leadId, businessName: parsed.data.businessName, number, message: parsed.data.message, resend: parsed.data.resend });
     if (!reservation.ok) return reply.code(409).send({ ok: false, error: reservation.reason, record: reservation.record });
     try {
-      const result = await sendWhatsApp(number, parsed.data.message);
+      const baileys = BaileysManager.getInstance(database);
+      const result = await baileys.sendTextMessage(number, parsed.data.message);
       const record = database.updateWhatsApp(leadId, { status: result.status, providerMessageId: result.providerMessageId });
       database.updateLead(leadId, { whatsappStatus: result.status, whatsappRunId: result.providerMessageId });
       return { ok: true, record };
     } catch (error) {
       const message = error instanceof Error ? error.message : 'WhatsApp could not be sent.';
-      const unconfirmed = /unconfirmed|HTTP (500|502|503|504|524)|without a trackable/i.test(message);
+      const unconfirmed = /unconfirmed|without a trackable/i.test(message);
       const record = database.updateWhatsApp(leadId, { status: unconfirmed ? 'Unconfirmed' : 'Failed', error: message });
       database.updateLead(leadId, { whatsappStatus: unconfirmed ? 'Unconfirmed' : 'Failed' });
-      if (error instanceof WahaNotConfiguredError) return reply.code(503).send({ ok: false, error: error.message, record });
       return reply.code(unconfirmed ? 502 : 400).send({ ok: false, error: message, record });
     }
   });
@@ -181,18 +181,8 @@ export async function apiRoutes(app: FastifyInstance, options: ApiRouteOptions):
     return { ok: true, record: record || { status: 'Not sent', leadId } };
   });
 
-  app.post('/api/webhooks/waha/ack', async (request, reply) => {
-    const secret = String(request.headers['x-waha-webhook-secret'] || '');
-    if (!verifyWebhookSecret(secret)) return reply.code(401).send({ ok: false, error: 'Invalid webhook secret.' });
-    const parsed = parseAck((request.body || {}) as Record<string, unknown>);
-    if (!parsed) return { ok: true, ignored: true };
-    const record = database.findWhatsAppByProviderId(parsed.providerMessageId);
-    if (!record) return { ok: true, ignored: true };
-    const rank: Record<string, number> = { Pending: 0, Sent: 1, Delivered: 2, Read: 3, Played: 4, Failed: -1 };
-    if (parsed.status !== 'Failed' && (rank[parsed.status] ?? 0) <= (rank[record.status] ?? -1)) return { ok: true, ignored: true };
-    database.updateWhatsApp(record.leadId, { status: parsed.status, error: parsed.error });
-    database.updateLead(record.leadId, { whatsappStatus: parsed.status });
-    database.updateConversationMessageStatus(parsed.providerMessageId, parsed.status);
-    return { ok: true, updated: true };
+  app.post('/api/webhooks/waha/ack', async () => {
+    // Legacy WAHA endpoint retained for backwards compatibility
+    return { ok: true, ignored: true };
   });
 }

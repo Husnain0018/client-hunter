@@ -3,11 +3,12 @@ import {
   Building2, Check, ChevronDown, Copy, ExternalLink, FileSpreadsheet, Globe2,
   Loader2, Mail, MapPin, MessageCircle, Plus, Search, ShieldCheck, Sparkles,
   Star, Trash2, X, AlertCircle, CheckCircle2, TrendingUp, Clock, HelpCircle,
-  Lightbulb, ListChecks
+  Lightbulb, ListChecks, QrCode
 } from 'lucide-react';
 import { api } from './api/client';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { ClientHandlerPage } from './pages/ClientHandlerPage';
+import { WhatsAppPage } from './pages/WhatsAppPage';
 import type { CustomService, Lead, LeadStats, LocationStatus, OutreachStrategy, Run, RunEvent, SearchForm, WhatsAppStatus } from './types';
 import './styles.css';
 
@@ -134,7 +135,8 @@ function downloadCsv(leads: Lead[]): void {
 }
 
 export default function App() {
-  const [currentPage, setCurrentPage] = useState<'prospecting' | 'client-handler'>('prospecting');
+  const [currentPage, setCurrentPage] = useState<'prospecting' | 'client-handler' | 'whatsapp'>('prospecting');
+  const [waState, setWaState] = useState<string>('not_connected');
   const [token, setToken] = useState(api.token);
   const [accessCode, setAccessCode] = useState('');
   const [rememberCode, setRememberCode] = useState(true);
@@ -224,6 +226,16 @@ export default function App() {
         });
     };
     loadRuns();
+  }, [token]);
+
+  useEffect(() => {
+    if (!token) return;
+    const unsub = api.subscribeWhatsAppEvents((info) => {
+      setWaState(info.state);
+    });
+    return () => {
+      unsub();
+    };
   }, [token]);
 
   useEffect(() => {
@@ -612,6 +624,31 @@ export default function App() {
                 <MessageCircle size={13} />
                 Client Handler
               </button>
+              <button
+                type="button"
+                onClick={() => setCurrentPage('whatsapp')}
+                style={{
+                  background: currentPage === 'whatsapp' ? 'linear-gradient(135deg, #0284c7, #0369a1)' : 'transparent',
+                  color: '#fff',
+                  border: currentPage === 'whatsapp' ? '1px solid rgba(2,132,199,0.5)' : '1px solid transparent',
+                  padding: '6px 14px',
+                  borderRadius: 999,
+                  fontSize: '12px',
+                  fontWeight: 700,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  cursor: 'pointer'
+                }}
+              >
+                <QrCode size={13} />
+                WhatsApp
+                {waState === 'connected' ? (
+                  <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#22c55e', display: 'inline-block' }} title="Connected" />
+                ) : waState === 'waiting_for_qr' ? (
+                  <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#f59e0b', display: 'inline-block' }} title="Waiting for QR scan" />
+                ) : null}
+              </button>
             </nav>
           </div>
           <div className="top-actions">
@@ -625,6 +662,10 @@ export default function App() {
         <ClientHandlerPage
           userPhoneDefault={form.userPhone}
           onBackToProspecting={() => setCurrentPage('prospecting')}
+        />
+      ) : currentPage === 'whatsapp' ? (
+        <WhatsAppPage
+          onNavigateToClientHandler={() => setCurrentPage('client-handler')}
         />
       ) : (
         <>
@@ -1511,7 +1552,7 @@ function LeadCard({
               <Detail title="Safe sending rules">
                 <ul>
                   <li>One lead and one number per request.</li>
-                  <li>The backend records a Sending lock before contacting WAHA.</li>
+                  <li>The backend records a Sending lock before dispatching via Baileys.</li>
                   <li>Local Pakistani numbers automatically convert (e.g. 0300... → 92300...).</li>
                   <li>Timeouts are Unconfirmed, never silently retried.</li>
                   <li>Delivery ACKs move forward only: Sent → Delivered → Read.</li>

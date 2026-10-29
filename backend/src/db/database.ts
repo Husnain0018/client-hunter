@@ -131,6 +131,12 @@ export class Database {
         message_id TEXT PRIMARY KEY,
         processed_at TEXT NOT NULL
       );
+      CREATE TABLE IF NOT EXISTS baileys_auth (
+        key_id TEXT PRIMARY KEY,
+        value_json TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_baileys_auth_key ON baileys_auth(key_id);
     `);
   }
 
@@ -674,5 +680,66 @@ export class Database {
       needsHuman,
       optedOut,
     };
+  }
+
+  // Baileys SQLite Auth State Storage
+  getBaileysAuth(keyId: string): string | null {
+    const row = this.stmt('SELECT value_json FROM baileys_auth WHERE key_id = ?').get(keyId) as { value_json: string } | undefined;
+    return row ? row.value_json : null;
+  }
+
+  getBaileysAuthMultiple(keyIds: string[]): Array<{ key_id: string; value_json: string }> {
+    if (keyIds.length === 0) return [];
+    const placeholders = keyIds.map(() => '?').join(',');
+    return this.stmt(`SELECT key_id, value_json FROM baileys_auth WHERE key_id IN (${placeholders})`).all(...keyIds) as Array<{ key_id: string; value_json: string }>;
+  }
+
+  setBaileysAuth(keyId: string, valueJson: string): void {
+    const now = new Date().toISOString();
+    this.stmt(`INSERT INTO baileys_auth (key_id, value_json, updated_at) VALUES (?, ?, ?)
+      ON CONFLICT(key_id) DO UPDATE SET value_json = excluded.value_json, updated_at = excluded.updated_at`).run(keyId, valueJson, now);
+  }
+
+  setBaileysAuthBatch(items: Array<{ keyId: string; valueJson: string }>): void {
+    if (items.length === 0) return;
+    const now = new Date().toISOString();
+    const insert = this.stmt(`INSERT INTO baileys_auth (key_id, value_json, updated_at) VALUES (?, ?, ?)
+      ON CONFLICT(key_id) DO UPDATE SET value_json = excluded.value_json, updated_at = excluded.updated_at`);
+    const tx = this.db.transaction((records: Array<{ keyId: string; valueJson: string }>) => {
+      for (const r of records) {
+        insert.run(r.keyId, r.valueJson, now);
+      }
+    });
+    tx(items);
+  }
+
+  deleteBaileysAuth(keyId: string): void {
+    this.stmt('DELETE FROM baileys_auth WHERE key_id = ?').run(keyId);
+  }
+
+  deleteBaileysAuthBatch(keyIds: string[]): void {
+    if (keyIds.length === 0) return;
+    const placeholders = keyIds.map(() => '?').join(',');
+    this.stmt(`DELETE FROM baileys_auth WHERE key_id IN (${placeholders})`).run(...keyIds);
+  }
+
+  clearBaileysAuth(): void {
+    this.stmt('DELETE FROM baileys_auth').run();
+  }
+
+  hasBaileysAuth(): boolean {
+    const row = this.stmt("SELECT 1 FROM baileys_auth WHERE key_id = 'creds' LIMIT 1").get();
+    return Boolean(row);
+  }
+
+  updateWhatsAppStatusByProviderId(providerMessageId: string, status: WhatsAppStatus, error?: string): boolean {
+    if (!providerMessageId) return false;
+    const row = this.findWhatsAppByProviderId(providerMessageId);
+    if (row) {
+      this.updateWhatsApp(row.leadId, { status, ...(error !== undefined ? { error } : {}) });
+      this.updateLead(row.leadId, { whatsappStatus: status });
+    }
+    this.updateConversationMessageStatus(providerMessageId, status);
+    return Boolean(row);
   }
 }

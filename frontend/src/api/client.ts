@@ -1,4 +1,5 @@
 import type {
+  BaileysStatusInfo,
   ClientConversation,
   ClientHandlerStats,
   ClientStage,
@@ -230,5 +231,71 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(dealInfo),
     });
+  },
+
+  // Direct Baileys WhatsApp Connection Methods
+  getWhatsAppStatus(): Promise<{ ok: boolean; status: BaileysStatusInfo }> {
+    return request('/api/whatsapp/status');
+  },
+  connectWhatsApp(): Promise<{ ok: boolean; status: BaileysStatusInfo }> {
+    return request('/api/whatsapp/connect', { method: 'POST', body: '{}' });
+  },
+  disconnectWhatsApp(): Promise<{ ok: boolean; status: BaileysStatusInfo }> {
+    return request('/api/whatsapp/disconnect', { method: 'POST', body: '{}' });
+  },
+  logoutWhatsApp(): Promise<{ ok: boolean; status: BaileysStatusInfo }> {
+    return request('/api/whatsapp/logout', { method: 'POST', body: '{}' });
+  },
+  restartWhatsApp(): Promise<{ ok: boolean; status: BaileysStatusInfo }> {
+    return request('/api/whatsapp/restart', { method: 'POST', body: '{}' });
+  },
+  subscribeWhatsAppEvents(onUpdate: (status: BaileysStatusInfo) => void): () => void {
+    const token = localStorage.getItem(TOKEN_KEY) || '';
+    const sseUrl = `${API}/api/whatsapp/events?token=${encodeURIComponent(token)}`;
+    let eventSource: EventSource | null = null;
+    let pollInterval: any = null;
+    let isClosed = false;
+
+    const startPolling = () => {
+      if (pollInterval || isClosed) return;
+      pollInterval = setInterval(async () => {
+        try {
+          const res = await request<{ ok: boolean; status: BaileysStatusInfo }>('/api/whatsapp/status');
+          if (res?.status) onUpdate(res.status);
+        } catch {
+          // ignore transient poll failure
+        }
+      }, 3000);
+    };
+
+    try {
+      eventSource = new EventSource(sseUrl);
+      eventSource.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data) as BaileysStatusInfo;
+          onUpdate(data);
+        } catch {
+          // ignore
+        }
+      };
+      eventSource.onerror = () => {
+        // Switch to polling if SSE has an issue
+        startPolling();
+      };
+    } catch {
+      startPolling();
+    }
+
+    return () => {
+      isClosed = true;
+      if (eventSource) {
+        eventSource.close();
+        eventSource = null;
+      }
+      if (pollInterval) {
+        clearInterval(pollInterval);
+        pollInterval = null;
+      }
+    };
   },
 };

@@ -4,6 +4,9 @@ dist/
 .env.*
 !.env.example
 data/
+baileys_auth/
+baileys_session/
+*.session
 *.db
 *.db-shm
 *.db-wal

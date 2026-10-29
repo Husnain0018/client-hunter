@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { authenticate } from '../security/auth.js';
 import type { Database } from '../db/database.js';
 import { ClientHandlerService } from '../services/clientHandlerService.js';
-import { verifyWebhookSecret } from '../services/wahaService.js';
+import { BaileysManager } from '../services/baileysManager.js';
 import type { ClientStage } from '../types/domain.js';
 
 const clientStageEnum = z.enum([
@@ -38,13 +38,14 @@ const closeDealSchema = z.object({
 export async function clientHandlerRoutes(app: FastifyInstance, options: { database: Database }): Promise<void> {
   const service = new ClientHandlerService(options.database);
 
-  // 1. Webhook for incoming WhatsApp client messages
-  app.post('/api/webhooks/waha/message', async (request, reply) => {
-    const secret = String(request.headers['x-waha-webhook-secret'] || '');
-    if (!verifyWebhookSecret(secret)) {
-      return reply.code(401).send({ ok: false, error: 'Invalid webhook secret.' });
-    }
+  // Wire direct Baileys real-time incoming messages to Client Handler
+  const baileys = BaileysManager.getInstance(options.database);
+  baileys.setMessageHandler(async (msg) => {
+    await service.handleIncomingWhatsAppMessage(msg);
+  });
 
+  // 1. Webhook for incoming WhatsApp messages (kept for backward compatibility)
+  app.post('/api/webhooks/waha/message', async (request, reply) => {
     const body = (request.body || {}) as Record<string, unknown>;
     const payload = (body.payload || body) as Record<string, unknown>;
 

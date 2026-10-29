@@ -23,7 +23,10 @@ export async function issueToken(expiresIn: string = env.AUTH_TOKEN_EXPIRES_IN):
 
 export async function authenticate(request: FastifyRequest, reply: FastifyReply): Promise<void> {
   const header = request.headers.authorization || '';
-  const token = header.startsWith('Bearer ') ? header.slice(7).trim() : '';
+  let token = header.startsWith('Bearer ') ? header.slice(7).trim() : '';
+  if (!token && typeof (request.query as any)?.token === 'string') {
+    token = String((request.query as any).token).trim();
+  }
   if (!token) {
     await reply.code(401).send({ ok: false, error: 'Authentication required.' });
     return;

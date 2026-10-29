@@ -10,7 +10,7 @@ import type {
   WhatsAppStatus,
 } from '../types/domain.js';
 import { ConversationEngine, isOptOutMessage } from './conversationEngine.js';
-import { sendWhatsApp, WahaNotConfiguredError } from './wahaService.js';
+import { BaileysManager } from './baileysManager.js';
 
 export class ClientHandlerService {
   readonly engine: ConversationEngine;
@@ -61,12 +61,19 @@ export class ClientHandlerService {
     let status: WhatsAppStatus = 'Sent';
 
     try {
-      const sent = await sendWhatsApp(lead.phone, cleanText);
-      providerMessageId = sent.providerMessageId;
-      status = sent.status;
+      const baileys = BaileysManager.getInstance(this.db);
+      if (baileys.getStatus().isReady) {
+        const sent = await baileys.sendTextMessage(lead.phone, cleanText);
+        providerMessageId = sent.providerMessageId;
+        status = sent.status;
+      } else if (process.env.NODE_ENV === 'test') {
+        providerMessageId = `sim_${Date.now()}`;
+        status = 'Sent';
+      } else {
+        throw new Error('WhatsApp is not connected. Open the WhatsApp page and scan the QR code to connect.');
+      }
     } catch (err) {
-      if (err instanceof WahaNotConfiguredError) {
-        // Local deterministic simulation fallback
+      if (process.env.NODE_ENV === 'test') {
         providerMessageId = `sim_${Date.now()}`;
         status = 'Sent';
       } else {
@@ -161,8 +168,8 @@ export class ClientHandlerService {
       return { handled: true, reason: 'Outbound message from self ignored.' };
     }
 
-    const fromRaw = typeof payload.from === 'string' ? payload.from : String((payload._data as any)?.from || '');
-    const text = typeof payload.body === 'string' ? payload.body.trim() : '';
+    const fromRaw = typeof payload.from === 'string' ? payload.from : String((payload._data as any)?.from || (payload as any)?.rawJid || '');
+    const text = typeof payload.body === 'string' ? payload.body.trim() : typeof (payload as any)?.text === 'string' ? ((payload as any).text as string).trim() : '';
 
     if (!fromRaw || !text) {
       return { handled: false, reason: 'Missing sender phone or message body.' };
@@ -258,6 +265,31 @@ export class ClientHandlerService {
   }
 
   /**
+   * Directly handles incoming WhatsApp messages dispatched from Baileys
+   */
+  async handleIncomingWhatsAppMessage(msg: {
+    id: string;
+    from: string;
+    rawJid?: string;
+    text: string;
+    timestamp?: string;
+  }): Promise<{
+    handled: boolean;
+    reason?: string;
+    leadId?: string;
+    autoReplied?: boolean;
+    replyMessage?: string;
+  }> {
+    return this.handleIncomingWebhook({
+      id: msg.id,
+      from: msg.rawJid || msg.from,
+      body: msg.text,
+      fromMe: false,
+      timestamp: msg.timestamp,
+    });
+  }
+
+  /**
    * Finalizes deal, logs agreed deliverables, and triggers notification
    */
   async closeDeal(leadId: string, dealInfo: DealClosingInfo): Promise<ClientConversation> {
@@ -282,7 +314,10 @@ export class ClientHandlerService {
     if (dealInfo.notifyUserWhatsApp && dealInfo.userPhoneNumber && !updated.closingNotifiedAt) {
       try {
         const notifText = `🎉 Deal successfully closed! You have acquired a new client: ${lead.businessName}. Services: ${updated.agreedServices.join(', ')}. Deliverables: ${updated.agreedDeliverables}. Timeline: ${updated.agreedTimeline}. Price: ${updated.agreedPrice}. Please review the client requirements and begin next steps.`;
-        await sendWhatsApp(dealInfo.userPhoneNumber, notifText);
+        const baileys = BaileysManager.getInstance(this.db);
+        if (baileys.getStatus().isReady) {
+          await baileys.sendTextMessage(dealInfo.userPhoneNumber, notifText);
+        }
         this.db.upsertClientConversation(leadId, {
           closingNotifiedAt: now,
         });

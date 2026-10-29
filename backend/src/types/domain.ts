@@ -5,6 +5,33 @@ export type SocialStatus = 'Active' | 'Slow' | 'Inactive' | 'Not checked' | 'No 
 export type WhatsAppStatus = 'Sending' | 'Pending' | 'Sent' | 'Delivered' | 'Read' | 'Played' | 'Failed' | 'Unconfirmed';
 export type LocationStatus = 'Verified' | 'City Match (Unverified Locality)' | 'Mismatch';
 
+export type BaileysConnectionState =
+  | 'not_connected'
+  | 'initializing'
+  | 'waiting_for_qr'
+  | 'connecting'
+  | 'connected'
+  | 'reconnecting'
+  | 'disconnected'
+  | 'logged_out'
+  | 'connection_error';
+
+export interface BaileysAccountInfo {
+  id: string;
+  name?: string;
+  phone?: string;
+}
+
+export interface BaileysStatusInfo {
+  state: BaileysConnectionState;
+  qr?: string | null;
+  account?: BaileysAccountInfo | null;
+  error?: string | null;
+  reconnectAttempts: number;
+  lastConnectedAt?: string | null;
+  isReady: boolean;
+}
+
 export interface ProblemFinding {
   type: 'confirmed' | 'potential';
   category: 'website' | 'response' | 'social' | 'reputation' | 'booking' | 'information';

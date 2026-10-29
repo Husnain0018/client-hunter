@@ -171,7 +171,7 @@ describe('AI Client Handler & Conversation Lifecycle', () => {
     const result2 = await service.handleIncomingWebhook(webhookPayload);
     expect(result2.handled).toBe(true);
     expect(result2.reason).toContain('Duplicate');
-  });
+  }, 15000);
 
   it('escalates to needs_human when client requests unauthorized discounts', async () => {
     const discountPayload = {

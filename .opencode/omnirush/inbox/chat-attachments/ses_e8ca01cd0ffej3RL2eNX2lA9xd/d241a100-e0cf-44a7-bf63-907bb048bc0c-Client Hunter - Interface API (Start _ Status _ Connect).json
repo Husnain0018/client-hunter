@@ -1,0 +1,4228 @@
+{
+  "name": "Client Hunter - Interface API (Start / Status / Connect)",
+  "nodes": [
+    {
+      "parameters": {
+        "jsCode": "const req=$('Prepare Request').first().json;const base=(Date.now()-1750000000000)*1000;let n=0;\nconst mk=(Type,Stage,Level,Message,P)=>{let j=P?JSON.stringify(P):'';if(j.length>45000){delete P.Email_Body_HTML;j=JSON.stringify(P);}return {json:{Run_ID:req.run_id,Seq:String(base+n++),Type,Stage,Level,Message,Payload:j}};};\nreturn [mk('stage','start','info','Search started for \"'+req.search_query+'\". Searching Google Maps now - first results appear in 1-3 minutes...')];"
+      },
+      "name": "Live: Start1",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        6304,
+        6832
+      ],
+      "id": "1a8c727a-94c2-4126-9ce3-b3b27a08a8be"
+    },
+    {
+      "parameters": {
+        "content": "## 1) START SEARCH  (POST /webhook/client-hunter-start)\nInterface se request aati hai -> access code check -> turant 'started' jawab -> lead search background mein chalti rahti hai.\n**ACCESS CODES** `Prepare Request1` node ke upar likhe hain (clients ko dene wale codes yahan badlein).",
+        "height": 230,
+        "width": 700,
+        "color": 4
+      },
+      "id": "44fe68f6-adcd-4837-ae65-ffa15cc81710",
+      "name": "Note ",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        5264,
+        6848
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "client-hunter-start",
+        "responseMode": "responseNode",
+        "options": {
+          "allowedOrigins": "http://127.0.0.1:8080"
+        }
+      },
+      "id": "4089c278-553a-496d-8188-d96f8ad311ca",
+      "name": "Start Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        5344,
+        7200
+      ],
+      "webhookId": "d0a5cfe6-2aa9-55f4-beb3-e750a4ff5d03"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ====== SETTINGS (service owner): apne clients ke access codes yahan likhein ======\nconst ACCESS_CODES = ['ali'];\nconst MAX_LEADS = 100;\n// ================================================================================\nconst raw = $input.first().json || {};\nconst b = raw.body || raw;\nconst s = (v) => (v === undefined || v === null) ? '' : String(v).trim();\nconst reject = (msg, code) => [{ json: { valid: false, status_code: code || 400, error: msg } }];\nif (!ACCESS_CODES.includes(s(b.access_code))) return reject('Invalid access code.', 401);\nconst runId = s(b.run_id);\nif (!/^[A-Za-z0-9_-]{8,64}$/.test(runId)) return reject('Invalid request id.');\nconst userName = s(b.user_name), userEmail = s(b.user_email), services = s(b.services);\nconst niche = s(b.niche), area = s(b.area), country = s(b.country);\nif (!userName || !/^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$/.test(userEmail) || !services || !niche || !area || !country) return reject('Please fill in all required fields.');\nlet n = parseInt(b.max_leads, 10);\nif (!n || n < 1) n = 20;\nif (n > MAX_LEADS) n = MAX_LEADS;\nconst arr = (v) => Array.isArray(v) ? v.map(x => s(x)).filter(Boolean).slice(-5000) : [];\nconst k = (b.known && typeof b.known === 'object') ? b.known : {};\nconst known = { ids: arr(k.ids), domains: arr(k.domains).map(x => x.toLowerCase()), phones: arr(k.phones) };\nconst sheetId = /^[A-Za-z0-9_-]{20,100}$/.test(s(b.sheet_id)) ? s(b.sheet_id) : '';\nconst sheetTab = s(b.sheet_tab).slice(0, 100) || 'Sheet1';\nreturn [{ json: {\n  valid: true,\n  run_id: runId,\n  user_name: userName,\n  company: s(b.company) || userName,\n  user_email: userEmail,\n  user_phone: s(b.user_phone),\n  portfolio: s(b.portfolio),\n  services: services,\n  niche: niche,\n  area: area,\n  country: country,\n  max_leads: n,\n  check_social: b.check_social === true || /^(yes|true)$/i.test(s(b.check_social)),\n  email_summary: b.email_summary === true,\n  known: known,\n  sheet_id: sheetId,\n  sheet_tab: sheetTab,\n  search_query: niche + ' in ' + area + ', ' + country\n} }];"
+      },
+      "id": "6c0dba7f-b528-47f8-ae57-2e1a0cb12cd1",
+      "name": "Prepare Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        5584,
+        7200
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "5a47bce1-38d2-5b92-8f8f-252d8cd89fc4",
+              "leftValue": "={{ $json.valid ? 'yes' : 'no' }}",
+              "rightValue": "yes",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "d578cfa2-3991-40d4-a88d-2a5810f72a6c",
+      "name": "Request Valid?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        5824,
+        7200
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "={{ JSON.stringify({ ok: false, error: $json.error }) }}",
+        "options": {
+          "responseCode": "={{ $json.status_code || 400 }}",
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "name": "Access-Control-Allow-Origin",
+                "value": "*"
+              }
+            ]
+          }
+        }
+      },
+      "id": "1e5f9988-5a61-45af-8c01-3fc2abe7eadd",
+      "name": "Respond Rejected",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        6064,
+        7408
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "={{ JSON.stringify({ ok: true, run_id: $json.run_id }) }}",
+        "options": {
+          "responseCode": 200,
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "name": "Access-Control-Allow-Origin",
+                "value": "*"
+              }
+            ]
+          }
+        }
+      },
+      "id": "1cc3a56a-4cca-4411-b6f8-fa5b64a15593",
+      "name": "Respond Started",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        6064,
+        7168
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.apify.com/v2/acts/compass~crawler-google-places/run-sync-get-dataset-items",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBearerAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ searchStringsArray: [$('Prepare Request').first().json.niche], locationQuery: $('Prepare Request').first().json.area + ', ' + $('Prepare Request').first().json.country, maxCrawledPlacesPerSearch: Math.min(Math.ceil($('Prepare Request').first().json.max_leads * 1.5), 150), language: 'en', skipClosedPlaces: true, website: 'allPlaces' }) }}",
+        "options": {
+          "timeout": 300000
+        }
+      },
+      "id": "b75d682d-a65d-4a84-9d9f-8f881ee4042e",
+      "name": "Run Google Maps Scraper",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        6304,
+        7168
+      ],
+      "alwaysOutputData": true,
+      "credentials": {
+        "httpBearerAuth": {
+          "id": "CCqPx3VWq22jOxaV",
+          "name": "Bearer Auth account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "df3a8f40-9c26-535b-afbb-627ec2622b86",
+              "leftValue": "={{ $('Prepare Request').first().json.sheet_id ? 'yes' : 'no' }}",
+              "rightValue": "yes",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "3a53dd3f-3130-4f12-b054-fb2ed87a72f9",
+      "name": "Sheet Connected? (read)",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        6544,
+        7168
+      ]
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('Prepare Request').first().json.sheet_id }}"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "={{ $('Prepare Request').first().json.sheet_tab }}"
+        },
+        "options": {}
+      },
+      "id": "9479a14b-55d4-4f59-91e1-356b08074453",
+      "name": "Read Existing Leads",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        6784,
+        7072
+      ],
+      "executeOnce": true,
+      "alwaysOutputData": true,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "V98ZHoRnELPsKyPo",
+          "name": "Google Sheets account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const req = $('Prepare Request').first().json;\nconst rawAll = $('Run Google Maps Scraper').all().map(i => i.json);\nconst raw = rawAll.filter(p => p && p.title);\nconst apifyErr = rawAll.find(p => p && p.error);\nlet existing = [];\ntry { existing = $('Read Existing Leads').all().map(i => i.json).filter(r => r && r.Lead_ID); } catch (e) { existing = []; }\n\nconst AGG = ['facebook.com','fb.com','instagram.com','linkedin.com','twitter.com','x.com','youtube.com','tiktok.com','linktr.ee','wa.me','google.com','business.site','marham.pk','instacare.pk','oladoc.com','sehat.com.pk','apkamuaalij.com','yellowpages.com','justdial.com','yelp.com','tripadvisor.com','foursquare.com','pakistanbusinessdirectory.com'];\nconst SOC = { facebook: ['facebook.com','fb.com'], instagram: ['instagram.com'], linkedin: ['linkedin.com'], twitter: ['twitter.com','x.com'], youtube: ['youtube.com'], tiktok: ['tiktok.com'] };\nconst host = (u) => { try { return new URL(/^https?:/i.test(u) ? u : 'https://' + u).hostname.replace(/^www\\./, '').toLowerCase(); } catch (e) { return ''; } };\nconst inList = (h, list) => list.some(d => h === d || h.endsWith('.' + d));\nconst digits = (s) => String(s || '').replace(/\\D/g, '');\nconst phoneKey = (s) => { const d = digits(s); return d.length >= 7 ? d.slice(-9) : ''; };\nconst hash = (s) => { let h = 5381; for (let i = 0; i < s.length; i++) { h = ((h << 5) + h + s.charCodeAt(i)) | 0; } return 'L' + (h >>> 0).toString(16); };\n\nconst GOV_HOST = [/(^|\\.)(gov|mil)(\\.[a-z]{2})?$/, /(^|\\.)(gob|gouv|govt|gv|gub|go|nic|gc|admin)\\.[a-z]{2}$/, /(^|\\.)bund\\.de$/];\nconst GOV_WORDS = /\\b(government|governmental|govt|municipal|municipality|embassy|consulate|police|city hall|town hall|courthouse|ministry|commissioner|tehsil|dhq|thq|civil hospital|public library|parliament|secretariat|revenue office|post office|fire station|army|military|cantonment|union council|city council|nadra|wapda|passport office)\\b/i;\nconst isGov = (p) => {\n  const h = host(String(p.website || ''));\n  if (h && GOV_HOST.some(r => r.test(h))) return true;\n  const txt = [p.categoryName].concat(p.categories || []).concat([p.title]).join(' ');\n  return GOV_WORDS.test(txt);\n};\n\nconst exIds = new Set(), exDomains = new Set(), exPhones = new Set();\nfor (const r of existing) {\n  if (r.Lead_ID) exIds.add(String(r.Lead_ID));\n  const d = host(r.Website || ''); if (d) exDomains.add(d);\n  const p = phoneKey(r.Phone); if (p) exPhones.add(p);\n}\n\nconst kn = req.known || {};\n(kn.ids || []).forEach(x => exIds.add(String(x)));\n(kn.domains || []).forEach(x => exDomains.add(String(x)));\n(kn.phones || []).forEach(x => exPhones.add(String(x)));\n\n// competitor pool = every place found in this search\nconst pool = raw.filter(p => !isGov(p)).map(p => {\n  let w = (p.website || '').trim(); let h = host(w);\n  if (h && (inList(h, AGG))) { w = ''; h = ''; }\n  return { id: String(p.placeId || ''), name: p.title, rating: p.totalScore || '', reviews: p.reviewsCount || 0, website: h, has_website: !!h };\n});\n\nconst seen = new Set();\nconst stats = { raw: raw.length, duplicates: 0, unreachable: 0, government: 0 };\nconst leads = [];\nfor (const p of raw) {\n  if (isGov(p)) { stats.government++; continue; }\n  let website = (p.website || '').trim();\n  let h = host(website);\n  const social = { facebook: '', instagram: '', linkedin: '', twitter: '', youtube: '', tiktok: '' };\n  if (h) {\n    for (const k of Object.keys(SOC)) { if (inList(h, SOC[k])) { social[k] = website; website = ''; h = ''; break; } }\n  }\n  if (h && inList(h, AGG)) { website = ''; h = ''; }\n  if (website && !/^https?:/i.test(website)) website = 'https://' + website;\n  const phone = String(p.phone || p.phoneUnformatted || '').trim();\n  const pk = phoneKey(phone);\n  const id = hash(String(p.placeId || (p.title + '|' + (p.address || ''))));\n\n  const dupBatch = seen.has(id) || (h && seen.has('d:' + h)) || (pk && seen.has('p:' + pk));\n  const dupSheet = exIds.has(id) || (h && exDomains.has(h)) || (pk && exPhones.has(pk));\n  if (dupBatch || dupSheet) { stats.duplicates++; continue; }\n  if (!website && !phone && !Object.values(social).some(Boolean)) { stats.unreachable++; continue; }\n  seen.add(id); if (h) seen.add('d:' + h); if (pk) seen.add('p:' + pk);\n\n  const competitors = pool\n    .filter(c => c.name !== p.title && c.rating)\n    .sort((a, b) => (b.reviews || 0) - (a.reviews || 0))\n    .slice(0, 3);\n\n  leads.push({ json: {\n    lead_id: id,\n    business_name: p.title,\n    category: p.categoryName || (Array.isArray(p.categories) && p.categories[0]) || req.niche,\n    address: p.address || '',\n    country: req.country,\n    phone: phone,\n    website: website,\n    maps_url: p.url || '',\n    rating: p.totalScore || '',\n    reviews: p.reviewsCount || 0,\n    maps_image: p.imageUrl || '',\n    social_from_maps: social,\n    competitors: competitors\n  } });\n  if (leads.length >= req.max_leads) break;\n}\nif (!leads.length) {\n  let msg;\n  if (apifyErr && !raw.length) msg = 'The business search service is temporarily unavailable. Please try again in a few minutes.';\n  else msg = 'No new leads found. Of ' + stats.raw + ' businesses we found, ' + stats.duplicates + ' were already delivered to you, ' + stats.government + ' were government offices and ' + stats.unreachable + ' had no contact details. Try a different area or business type.';\n  return [{ json: { __empty: true, message: msg, stats: stats } }];\n}\nreturn leads;"
+      },
+      "id": "0b87ad9d-9143-4969-920b-9badef882d16",
+      "name": "Normalize & Dedupe",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        7024,
+        7168
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "a3561952-7eb1-5377-901a-f513c67f3206",
+              "leftValue": "={{ $json.__empty ? 'empty' : 'ok' }}",
+              "rightValue": "ok",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "50f02178-ed47-4ff7-b9e8-6f1bb3d31a37",
+      "name": "Any New Leads?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        7264,
+        7168
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "429668f8-3bd2-5161-824b-16ccbfa7c644",
+              "leftValue": "={{ $json.website }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "55b5c794-a7a6-41d1-9933-3d7ad4aeeb90",
+      "name": "Has Website?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        7504,
+        7088
+      ]
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.website }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "User-Agent",
+              "value": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36"
+            },
+            {
+              "name": "Accept",
+              "value": "text/html,application/xhtml+xml"
+            },
+            {
+              "name": "Accept-Language",
+              "value": "en-US,en;q=0.9"
+            }
+          ]
+        },
+        "options": {
+          "batching": {
+            "batch": {
+              "batchSize": 5,
+              "batchInterval": 500
+            }
+          },
+          "redirect": {
+            "redirect": {
+              "maxRedirects": 5
+            }
+          },
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true,
+              "responseFormat": "text"
+            }
+          },
+          "timeout": 20000
+        }
+      },
+      "id": "922849e0-68b9-440f-ac18-cca3eb3666e7",
+      "name": "Fetch Homepage",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        7744,
+        6960
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const BAD_EMAIL = /\\.(png|jpe?g|gif|webp|svg|css|js|woff2?)$|sentry|wixpress|example\\.|domain\\.com|yourname|email@email|u003e|@2x/i;\nconst absUrl = (u, base) => { try { return new URL(u, base).href; } catch (e) { return ''; } };\nconst stripTags = (h) => h.replace(/<script[\\s\\S]*?<\\/script>/gi, ' ').replace(/<style[\\s\\S]*?<\\/style>/gi, ' ').replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(/\\s+/g, ' ').trim();\nconst bodyOf = (r) => { if (!r) return ''; if (typeof r.body === 'string') return r.body; if (typeof r.data === 'string') return r.data; return ''; };\nfunction extractContacts(html) {\n  const emails = new Set(); const phones = new Set();\n  for (const m of html.matchAll(/mailto:([^\"'?\\s>]+)/gi)) {\n    let e = ''; try { e = decodeURIComponent(m[1]).toLowerCase().trim(); } catch (x) { e = m[1].toLowerCase().trim(); }\n    if (e && !BAD_EMAIL.test(e)) emails.add(e);\n  }\n  const text = stripTags(html);\n  for (const m of text.matchAll(/[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\\.[A-Za-z0-9-]+)*\\.[A-Za-z]{2,}/g)) { const e = m[0].toLowerCase(); if (!BAD_EMAIL.test(e)) emails.add(e); }\n  for (const m of html.matchAll(/href=[\"']tel:([^\"']+)[\"']/gi)) {\n    let p = ''; try { p = decodeURIComponent(m[1]).trim(); } catch (x) { p = m[1].trim(); }\n    const d = p.replace(/\\D/g, ''); if (d.length >= 9 && d.length <= 14) phones.add(p);\n  }\n  for (const m of text.matchAll(/(?:\\+|00|0)\\d[\\d\\s\\-().]{8,16}\\d/g)) {\n    const p = m[0].trim(); const d = p.replace(/\\D/g, ''); if (d.length >= 10 && d.length <= 13) phones.add(p);\n  }\n  return { emails: [...emails].slice(0, 5), phones: [...phones].slice(0, 5) };\n}\nfunction extractSocials(html, seed) {\n  const s = Object.assign({ facebook: '', instagram: '', linkedin: '', twitter: '', youtube: '', tiktok: '' }, seed || {});\n  for (const m of html.matchAll(/href=[\"'](https?:\\/\\/[^\"']+)[\"']/gi)) {\n    const u = m[1].replace(/&amp;/g, '&');\n    if (!s.facebook && /facebook\\.com\\/[A-Za-z0-9.\\-_]+/i.test(u) && !/sharer|share\\.php|plugins|dialog|\\/tr\\?|\\/policies|l\\.facebook|facebook\\.com\\/(?:tr|sharer)/i.test(u)) s.facebook = u;\n    if (!s.instagram && /instagram\\.com\\/[A-Za-z0-9._]+/i.test(u) && !/instagram\\.com\\/(?:p|reel|explore|accounts)\\//i.test(u)) s.instagram = u;\n    if (!s.linkedin && /linkedin\\.com\\/(?:company|in|school)\\//i.test(u)) s.linkedin = u;\n    if (!s.twitter && /(?:twitter|x)\\.com\\/(?!share|intent|home)[A-Za-z0-9_]+/i.test(u)) s.twitter = u;\n    if (!s.youtube && /youtube\\.com\\/(?:channel|c|user|@)/i.test(u)) s.youtube = u;\n    if (!s.tiktok && /tiktok\\.com\\/@/i.test(u)) s.tiktok = u;\n  }\n  return s;\n}\n\nconst leads = $('Has Website?').all(0);\nconst YEAR = new Date().getFullYear();\nconst out = [];\n$input.all().forEach((it, i) => {\n  const lead = (leads[i] || {}).json || {};\n  const r = it.json || {};\n  const status = Number(r.statusCode || 0);\n  const html = bodyOf(r);\n  const base = lead.website || '';\n  const blocked = [401, 403, 406, 429, 503].includes(status);\n  const reachable = status >= 200 && status < 400 && html.length > 300;\n  const issues = []; let score = 100; let siteStatus = '';\n  let contacts = { emails: [], phones: [] }; let socials = Object.assign({}, lead.social_from_maps);\n  let images = []; let contactUrl = ''; const tech = []; let title = ''; let metaDesc = ''; const sig = {};\n\n  if (!reachable) {\n    if (blocked) { score = 50; siteStatus = 'Unverified'; issues.push('Website blocks automated checks (HTTP ' + status + ') - could not be audited, verify manually'); }\n    else { score = 10; siteStatus = 'Not Loading'; issues.push(status ? 'Website returned HTTP ' + status + ' (broken or down)' : 'Website did not respond (down, expired or very slow)'); }\n  } else {\n    contacts = extractContacts(html);\n    socials = extractSocials(html, socials);\n    const text = stripTags(html);\n    title = ((html.match(/<title[^>]*>([\\s\\S]*?)<\\/title>/i) || [])[1] || '').replace(/\\s+/g, ' ').trim();\n    metaDesc = (html.match(/<meta[^>]+name=[\"']description[\"'][^>]*content=[\"']([^\"']*)[\"']/i) || html.match(/<meta[^>]+content=[\"']([^\"']*)[\"'][^>]*name=[\"']description[\"']/i) || [])[1] || '';\n    const h1 = (html.match(/<h1[\\s>]/gi) || []).length;\n    sig.https = /^https:/i.test(base);\n    sig.viewport = /<meta[^>]+name=[\"']viewport[\"']/i.test(html);\n    sig.form = /<form[\\s>]/i.test(html);\n    sig.whatsapp = /wa\\.me|api\\.whatsapp\\.com|whatsapp/i.test(html);\n    sig.chat = /tawk\\.to|livechat|tidio|crisp\\.chat|intercom|drift\\.com|zopim|chatbot|botpress|manychat/i.test(html);\n    sig.analytics = /googletagmanager|gtag\\(|google-analytics|fbq\\(|connect\\.facebook\\.net/i.test(html);\n    sig.schema = /application\\/ld\\+json/i.test(html);\n    sig.og = /property=[\"']og:/i.test(html);\n    if (/wp-content|wp-includes/i.test(html)) tech.push('WordPress');\n    if (/wixstatic|wix\\.com/i.test(html)) tech.push('Wix');\n    if (/cdn\\.shopify|shopify/i.test(html)) tech.push('Shopify');\n    if (/squarespace/i.test(html)) tech.push('Squarespace');\n    if (/webflow/i.test(html)) tech.push('Webflow');\n    if (/elementor/i.test(html)) tech.push('Elementor');\n    if (/joomla/i.test(html)) tech.push('Joomla');\n    if (/blogspot|blogger/i.test(html)) tech.push('Blogger');\n    const imgSet = new Set();\n    const og = (html.match(/property=[\"']og:image[\"'][^>]*content=[\"']([^\"']+)[\"']/i) || html.match(/content=[\"']([^\"']+)[\"'][^>]*property=[\"']og:image[\"']/i) || [])[1];\n    if (og) imgSet.add(absUrl(og, base));\n    for (const m of html.matchAll(/<img[^>]+(?:data-src|src)=[\"']([^\"']+)[\"']/gi)) {\n      const u = absUrl(m[1], base);\n      if (u && /\\.(jpe?g|png|webp)(\\?|$)/i.test(u) && !/logo|icon|sprite|pixel|avatar|emoji|spinner|loader/i.test(u)) imgSet.add(u);\n      if (imgSet.size >= 8) break;\n    }\n    images = [...imgSet].slice(0, 5);\n    sig.img_count = (html.match(/<img[\\s]/gi) || []).length;\n    sig.img_missing_alt = (html.match(/<img(?![^>]*\\balt=[\"'][^\"']+[\"'])[^>]*>/gi) || []).length;\n    const cy = html.match(/(?:©|&copy;|copyright)[^0-9]{0,30}((?:19|20)\\d{2})(?:\\s*[-–]\\s*((?:19|20)\\d{2}))?/i);\n    sig.copyright_year = cy ? Number(cy[2] || cy[1]) : 0;\n    const baseHost = (() => { try { return new URL(base).hostname; } catch (e) { return ''; } })();\n    for (const m of html.matchAll(/<a[^>]+href=[\"']([^\"'#]+)[\"'][^>]*>([\\s\\S]*?)<\\/a>/gi)) {\n      if (/contact/i.test(m[1]) || /contact/i.test(stripTags(m[2]))) {\n        const u = absUrl(m[1], base);\n        try { if (u && new URL(u).hostname === baseHost) { contactUrl = u; break; } } catch (e) {}\n      }\n    }\n    const deduct = (pts, msg) => { score -= pts; issues.push(msg); };\n    if (!sig.https) deduct(5, 'Website address is http:// (SSL/HTTPS not confirmed)');\n    if (!sig.viewport) deduct(20, 'Not mobile-friendly (no responsive viewport tag)');\n    if (!title) deduct(8, 'Missing page title (hurts Google ranking)');\n    if (!metaDesc) deduct(10, 'Missing meta description (poor Google snippet)');\n    if (h1 === 0) deduct(6, 'No H1 heading on the homepage');\n    if (!sig.form) deduct(8, 'No contact/enquiry form on the homepage');\n    if (!sig.whatsapp && !sig.chat) deduct(6, 'No WhatsApp button or live chat / chatbot');\n    if (!sig.analytics) deduct(6, 'No analytics or ad-tracking installed (Google Analytics / Pixel)');\n    if (!sig.schema) deduct(4, 'No structured data (schema) for local SEO');\n    if (!sig.og) deduct(3, 'No social-sharing (Open Graph) tags');\n    if (sig.img_count < 3) deduct(6, 'Very few images - site looks plain / thin');\n    if (sig.img_count >= 4 && sig.img_missing_alt / sig.img_count > 0.5) deduct(5, 'Most images have no alt text (SEO + accessibility)');\n    if (sig.copyright_year && sig.copyright_year < YEAR - 2) deduct(10, 'Footer copyright shows ' + sig.copyright_year + ' - site looks outdated');\n    if (text.length < 1500) deduct(8, 'Very little text content on the homepage');\n    if (!contacts.emails.length && !contacts.phones.length) deduct(10, 'No email or phone visible on the homepage');\n    if (!Object.values(socials).some(Boolean)) deduct(8, 'No social media links on the website');\n    if ((html.match(/<table[\\s>]/gi) || []).length > 10 || /<marquee|<font[\\s>]/i.test(html)) deduct(10, 'Old-style page code (tables / deprecated tags)');\n    score = Math.max(0, Math.min(100, score));\n    siteStatus = score >= 75 ? 'Good' : (score >= 50 ? 'Needs Improvement' : 'Poor');\n  }\n  out.push({ json: Object.assign({}, lead, {\n    has_website: true,\n    website_reachable: reachable,\n    website_http_status: status,\n    website_score: score,\n    website_status: siteStatus,\n    website_issues: issues,\n    website_images: images,\n    emails: contacts.emails,\n    phones: lead.phone ? [lead.phone].concat(contacts.phones) : contacts.phones,\n    social: socials,\n    tech: tech.join(', '),\n    site_title: title,\n    meta_description: metaDesc,\n    contact_url: contactUrl,\n    website_signals: sig\n  }) });\n});\nreturn out;"
+      },
+      "id": "dc8c4558-1802-4b43-b593-24eb5c95b1c7",
+      "name": "Parse Homepage",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        7984,
+        6960
+      ]
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.contact_url || $json.website }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "User-Agent",
+              "value": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36"
+            },
+            {
+              "name": "Accept",
+              "value": "text/html,application/xhtml+xml"
+            },
+            {
+              "name": "Accept-Language",
+              "value": "en-US,en;q=0.9"
+            }
+          ]
+        },
+        "options": {
+          "batching": {
+            "batch": {
+              "batchSize": 5,
+              "batchInterval": 500
+            }
+          },
+          "redirect": {
+            "redirect": {
+              "maxRedirects": 5
+            }
+          },
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true,
+              "responseFormat": "text"
+            }
+          },
+          "timeout": 20000
+        }
+      },
+      "id": "bc54256b-129c-4370-a9ea-99771eac365e",
+      "name": "Fetch Contact Page",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        8224,
+        6960
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const BAD_EMAIL = /\\.(png|jpe?g|gif|webp|svg|css|js|woff2?)$|sentry|wixpress|example\\.|domain\\.com|yourname|email@email|u003e|@2x/i;\nconst absUrl = (u, base) => { try { return new URL(u, base).href; } catch (e) { return ''; } };\nconst stripTags = (h) => h.replace(/<script[\\s\\S]*?<\\/script>/gi, ' ').replace(/<style[\\s\\S]*?<\\/style>/gi, ' ').replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(/\\s+/g, ' ').trim();\nconst bodyOf = (r) => { if (!r) return ''; if (typeof r.body === 'string') return r.body; if (typeof r.data === 'string') return r.data; return ''; };\nfunction extractContacts(html) {\n  const emails = new Set(); const phones = new Set();\n  for (const m of html.matchAll(/mailto:([^\"'?\\s>]+)/gi)) {\n    let e = ''; try { e = decodeURIComponent(m[1]).toLowerCase().trim(); } catch (x) { e = m[1].toLowerCase().trim(); }\n    if (e && !BAD_EMAIL.test(e)) emails.add(e);\n  }\n  const text = stripTags(html);\n  for (const m of text.matchAll(/[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\\.[A-Za-z0-9-]+)*\\.[A-Za-z]{2,}/g)) { const e = m[0].toLowerCase(); if (!BAD_EMAIL.test(e)) emails.add(e); }\n  for (const m of html.matchAll(/href=[\"']tel:([^\"']+)[\"']/gi)) {\n    let p = ''; try { p = decodeURIComponent(m[1]).trim(); } catch (x) { p = m[1].trim(); }\n    const d = p.replace(/\\D/g, ''); if (d.length >= 9 && d.length <= 14) phones.add(p);\n  }\n  for (const m of text.matchAll(/(?:\\+|00|0)\\d[\\d\\s\\-().]{8,16}\\d/g)) {\n    const p = m[0].trim(); const d = p.replace(/\\D/g, ''); if (d.length >= 10 && d.length <= 13) phones.add(p);\n  }\n  return { emails: [...emails].slice(0, 5), phones: [...phones].slice(0, 5) };\n}\nfunction extractSocials(html, seed) {\n  const s = Object.assign({ facebook: '', instagram: '', linkedin: '', twitter: '', youtube: '', tiktok: '' }, seed || {});\n  for (const m of html.matchAll(/href=[\"'](https?:\\/\\/[^\"']+)[\"']/gi)) {\n    const u = m[1].replace(/&amp;/g, '&');\n    if (!s.facebook && /facebook\\.com\\/[A-Za-z0-9.\\-_]+/i.test(u) && !/sharer|share\\.php|plugins|dialog|\\/tr\\?|\\/policies|l\\.facebook|facebook\\.com\\/(?:tr|sharer)/i.test(u)) s.facebook = u;\n    if (!s.instagram && /instagram\\.com\\/[A-Za-z0-9._]+/i.test(u) && !/instagram\\.com\\/(?:p|reel|explore|accounts)\\//i.test(u)) s.instagram = u;\n    if (!s.linkedin && /linkedin\\.com\\/(?:company|in|school)\\//i.test(u)) s.linkedin = u;\n    if (!s.twitter && /(?:twitter|x)\\.com\\/(?!share|intent|home)[A-Za-z0-9_]+/i.test(u)) s.twitter = u;\n    if (!s.youtube && /youtube\\.com\\/(?:channel|c|user|@)/i.test(u)) s.youtube = u;\n    if (!s.tiktok && /tiktok\\.com\\/@/i.test(u)) s.tiktok = u;\n  }\n  return s;\n}\n\nconst parsed = $('Parse Homepage').all();\nconst out = [];\n$input.all().forEach((it, i) => {\n  const base = (parsed[i] || {}).json || {};\n  const html = bodyOf(it.json || {});\n  let emails = (base.emails || []).slice();\n  let phones = (base.phones || []).slice();\n  let social = Object.assign({}, base.social);\n  if (html.length > 300) {\n    const c = extractContacts(html);\n    emails = [...new Set(emails.concat(c.emails))].slice(0, 5);\n    phones = [...new Set(phones.concat(c.phones))].slice(0, 6);\n    social = extractSocials(html, social);\n  }\n  out.push({ json: Object.assign({}, base, { emails: emails, phones: phones, social: social }) });\n});\nreturn out;"
+      },
+      "id": "7f8fe9ed-7402-4651-9769-4f74abd069d5",
+      "name": "Merge Contact Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        8464,
+        6960
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "return $input.all().map(it => {\n  const l = it.json;\n  return { json: Object.assign({}, l, {\n    has_website: false,\n    website_reachable: false,\n    website_score: 0,\n    website_status: 'No Website',\n    website_issues: ['No own website found for this business'],\n    website_images: l.maps_image ? [l.maps_image] : [],\n    emails: [],\n    phones: l.phone ? [l.phone] : [],\n    social: Object.assign({}, l.social_from_maps),\n    tech: '',\n    contact_url: ''\n  }) };\n});"
+      },
+      "id": "d5df059a-c9ce-4c1c-b2be-8014fbeb57e2",
+      "name": "Prepare No-Website Lead",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        7904,
+        7232
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "a9c5c616-27f5-4844-b96a-34672ff0654a",
+      "name": "Merge Leads",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [
+        8704,
+        7088
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const req = $('Prepare Request').first().json;\nconst leads = $input.all().map(i => i.json);\nconst igUrl = (u) => {\n  const m = String(u || '').match(/instagram\\.com\\/([A-Za-z0-9._-]+)/i);\n  if (!m) return '';\n  if (['p', 'reel', 'reels', 'explore', 'accounts', 'stories', 'tv'].includes(m[1].toLowerCase())) return '';\n  return 'https://www.instagram.com/' + m[1] + '/';\n};\nconst jobs = [];\nif (req.check_social) {\n  leads.forEach(l => {\n    const s = l.social || {};\n    if (s.facebook) jobs.push({ lead_id: l.lead_id, platform: 'facebook', url: s.facebook, actor: 'apify~facebook-posts-scraper', input: { startUrls: [{ url: s.facebook }], resultsLimit: 3 } });\n    const ig = igUrl(s.instagram);\n    if (ig) jobs.push({ lead_id: l.lead_id, platform: 'instagram', url: ig, actor: 'apify~instagram-scraper', input: { directUrls: [ig], resultsType: 'posts', resultsLimit: 3, addParentData: false } });\n  });\n}\nreturn jobs.length ? jobs.map(j => ({ json: j })) : [{ json: { no_jobs: true } }];"
+      },
+      "id": "a81efe5d-a3e9-4a60-93ca-e4c5b7e494a4",
+      "name": "Build Social Jobs",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        8944,
+        7088
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "16af50f4-951c-58c8-b50d-7b78ba2ab66c",
+              "leftValue": "={{ $json.no_jobs ? 'none' : 'jobs' }}",
+              "rightValue": "jobs",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "ec35b25b-0dfb-4086-914b-cbc91c34c442",
+      "name": "Has Social Jobs?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        9184,
+        7088
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.apify.com/v2/acts/{{ $json.actor }}/run-sync-get-dataset-items",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBearerAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.input) }}",
+        "options": {
+          "timeout": 180000
+        }
+      },
+      "id": "22190e4b-6bad-4bee-bca8-e6f0c4301f15",
+      "name": "Run Social Scraper",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        9424,
+        7008
+      ],
+      "alwaysOutputData": true,
+      "credentials": {
+        "httpBearerAuth": {
+          "id": "CCqPx3VWq22jOxaV",
+          "name": "Bearer Auth account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const req = $('Prepare Request').first().json;\nconst leads = $('Merge Leads').all().map(i => i.json);\nconst jobs = $('Build Social Jobs').all().map(i => i.json).filter(j => !j.no_jobs);\nconst items = $input.all();\nconst now = Date.now();\nconst toDate = (v) => {\n  if (v === undefined || v === null || v === '') return null;\n  const d = (typeof v === 'number') ? new Date(v < 1e12 ? v * 1000 : v) : new Date(v);\n  return (d && !isNaN(d.getTime())) ? d : null;\n};\nconst norm = (u) => String(u || '').trim().toLowerCase().replace(/^https?:\\/\\/(www\\.|m\\.|web\\.)?/, '').replace(/\\/+$/, '');\nconst baseKey = (u) => { const n = norm(u); return n.indexOf('profile.php') !== -1 ? n : n.replace(/[?#].*$/, '').replace(/\\/+$/, ''); };\nconst dates = {};\nconst attempted = {};\njobs.forEach(j => { attempted[j.lead_id + '|' + j.platform] = true; });\n\nconst findJob = (it) => {\n  const r = it.json || {};\n  const cands = [r.inputUrl, r.facebookUrl, r.startUrl, r.directUrl].filter(Boolean);\n  for (const c of cands) { const n = norm(c); const j = jobs.find(x => norm(x.url) === n); if (j) return j; }\n  for (const c of cands) { const b = baseKey(c); const j = jobs.find(x => baseKey(x.url) === b); if (j) return j; }\n  if (r.ownerUsername) {\n    const u = String(r.ownerUsername).toLowerCase();\n    const j = jobs.find(x => x.platform === 'instagram' && baseKey(x.url).endsWith('/' + u));\n    if (j) return j;\n  }\n  if (!cands.length) {\n    const pi = it.pairedItem;\n    const idx = (pi && typeof pi.item === 'number') ? pi.item : (Array.isArray(pi) && pi[0] ? pi[0].item : undefined);\n    if (idx !== undefined && jobs[idx]) return jobs[idx];\n  }\n  return null;\n};\n\nitems.forEach(it => {\n  const r = it.json || {};\n  if (r.no_jobs || r.error) return;\n  const job = findJob(it);\n  if (!job) return;\n  const d = toDate(r.time || r.timestamp || r.date || r.postedAt || r.takenAtTimestamp || r.publishedTime || r.createdTime);\n  if (!d) return;\n  const k = job.lead_id + '|' + job.platform;\n  (dates[k] = dates[k] || []).push(d);\n});\n\nconst summarize = (leadId, platform, url) => {\n  if (!url) return null;\n  const k = leadId + '|' + platform;\n  if (!req.check_social) return { url: url, status: 'Not checked', last_post: '', days_inactive: '' };\n  const arr = dates[k] || [];\n  if (!arr.length) return { url: url, status: attempted[k] ? 'No public posts found' : 'Not checked', last_post: '', days_inactive: '' };\n  const last = new Date(Math.max.apply(null, arr.map(d => d.getTime())));\n  const days = Math.max(0, Math.floor((now - last.getTime()) / 864e5));\n  const st = days <= 30 ? 'Active' : (days <= 90 ? 'Slow' : 'Inactive');\n  return { url: url, status: st, last_post: last.toISOString().slice(0, 10), days_inactive: days };\n};\n\nreturn leads.map(l => {\n  const s = l.social || {};\n  const fb = summarize(l.lead_id, 'facebook', s.facebook);\n  const ig = summarize(l.lead_id, 'instagram', s.instagram);\n  const parts = [];\n  if (fb) parts.push('Facebook: ' + fb.status + (fb.days_inactive !== '' ? ' (last post ' + fb.days_inactive + ' days ago)' : ''));\n  if (ig) parts.push('Instagram: ' + ig.status + (ig.days_inactive !== '' ? ' (last post ' + ig.days_inactive + ' days ago)' : ''));\n  ['linkedin', 'twitter', 'youtube', 'tiktok'].forEach(p => { if (s[p]) parts.push(p.charAt(0).toUpperCase() + p.slice(1) + ': page found'); });\n  return { json: Object.assign({}, l, {\n    social_activity: { facebook: fb, instagram: ig },\n    social_summary: parts.length ? parts.join(' | ') : 'No social media found'\n  }) };\n});"
+      },
+      "id": "795323b0-198a-43a4-b8d4-a8eccb716bee",
+      "name": "Attach Social Results",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        9664,
+        7088
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const req = $('Prepare Request').first().json;\nconst esc = (v) => String(v === undefined || v === null ? '' : v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');\nconst svcList = String(req.services || '').split(/[,;\\n|]+/).map(s => s.trim()).filter(Boolean);\nreturn $input.all().map(it => {\n  const l = it.json;\n  const s = l.social_activity || {};\n  const soc = [];\n  ['facebook', 'instagram'].forEach(p => {\n    if (s[p]) soc.push('    <platform name=\"' + p + '\"><status>' + esc(s[p].status) + '</status><days_since_last_post>' + esc(s[p].days_inactive) + '</days_since_last_post></platform>');\n  });\n  ['linkedin', 'twitter', 'youtube', 'tiktok'].forEach(p => { if (l.social && l.social[p]) soc.push('    <platform name=\"' + p + '\"><status>page exists</status></platform>'); });\n  const comps = (l.competitors || []).map(c => '    <competitor><name>' + esc(c.name) + '</name><google_rating>' + esc(c.rating) + '</google_rating><review_count>' + esc(c.reviews) + '</review_count><has_website>' + (c.has_website ? 'true' : 'false') + '</has_website></competitor>').join('\\n');\n  const issues = (l.website_issues || []).map(x => '    <issue>' + esc(x) + '</issue>').join('\\n');\n  const user = [\n    '<lead>',\n    '  <business_name>' + esc(l.business_name) + '</business_name>',\n    '  <category>' + esc(l.category) + '</category>',\n    '  <address>' + esc(l.address) + '</address>',\n    '  <google_rating>' + esc(l.rating) + '</google_rating>',\n    '  <review_count>' + esc(l.reviews) + '</review_count>',\n    '  <has_website>' + (l.has_website ? 'true' : 'false') + '</has_website>',\n    '  <website_url>' + esc(l.website) + '</website_url>',\n    '  <website_status>' + esc(l.website_status) + '</website_status>',\n    '  <website_score_out_of_100>' + esc(l.website_score) + '</website_score_out_of_100>',\n    '  <technology>' + esc(l.tech) + '</technology>',\n    '  <website_issues>', issues, '  </website_issues>',\n    '  <contact><email_available>' + ((l.emails || []).length ? 'true' : 'false') + '</email_available><phone_available>' + (((l.phones || []).length || l.phone) ? 'true' : 'false') + '</phone_available></contact>',\n    '  <social_media>', soc.join('\\n'), '  </social_media>',\n    '</lead>',\n    '<competitors>', comps, '</competitors>',\n    '<sender>',\n    '  <name>' + esc(req.user_name) + '</name>',\n    '  <company>' + esc(req.company) + '</company>',\n    '  <services>' + svcList.map(x => '<service>' + esc(x) + '</service>').join('') + '</services>',\n    '  <portfolio>' + esc(req.portfolio) + '</portfolio>',\n    '</sender>'\n  ].join('\\n');\n  return { json: Object.assign({}, l, { ai_user: user }) };\n});"
+      },
+      "id": "ee25d7cd-74d4-4d34-bbb9-24de9c1009ce",
+      "name": "Build AI Prompt",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        9904,
+        7088
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.ai_user }}",
+        "options": {
+          "systemMessage": "<system_prompt>\n  <role>\n    You are a senior digital-marketing and sales-strategy analyst working for a service agency. You evaluate ONE local-business lead at a time using ONLY the structured data you are given, then produce a personalised, professional outreach plan.\n  </role>\n\n  <input_description>\n    The user message contains a lead block (facts scraped from Google Maps, the business website and social media), a competitors list (real nearby businesses from the same Google Maps search) and a sender block (who is writing and which services they sell; each sellable service is one service element).\n  </input_description>\n\n  <rules>\n    <rule id=\"1\">Use ONLY facts present in the input. Never invent numbers, reviews, traffic, rankings, prices, names or competitor details.</rule>\n    <rule id=\"2\">recommended_services and email solutions MUST come only from the service elements listed in the sender block. Copy each service name exactly as written. Never offer anything else.</rule>\n    <rule id=\"3\">Tone: professional, respectful, consultative, human. No hype, no spam words, no guarantees, no fear tactics, no exaggerated claims.</rule>\n    <rule id=\"4\">If has_website is false: do not write website_findings about speed or design. State politely that no dedicated website was found and explain the business impact (customers cannot find or trust them online).</rule>\n    <rule id=\"5\">If website_status is Unverified: do NOT claim the website is broken. Mention only issues that are explicitly listed.</rule>\n    <rule id=\"6\">Mention a social platform only if it appears in the social_media block. If none is listed, social_findings must be an empty array. Use the exact days_since_last_post value given; never guess dates.</rule>\n    <rule id=\"7\">competitor_insight must use only the competitors listed (name, rating, review count, has_website). If the list is empty, return an empty string.</rule>\n    <rule id=\"8\">Each finding is one short, specific sentence addressed to the business owner (second person) and based on a listed issue. Maximum 5 website_findings and 3 social_findings.</rule>\n    <rule id=\"9\">Write in clear, simple English. No emojis. No markdown. No HTML inside any value.</rule>\n    <rule id=\"10\">If phone_available is true, whatsapp_message is MANDATORY and must never be empty: a friendly message of 40 to 70 words that greets the business by name, mentions one specific observation, names one or two of the recommended services, and ends with a soft question. This applies even when an email address also exists.</rule>\n    <rule id=\"11\">Your whole reply must be ONE valid JSON object. Use double quotes for every key and string, never put a comma after the last item of an object or array, and do not use comments. Do not write any text, explanation or code fence before or after it. The first character of your reply must be the opening curly bracket and the last character must be the closing curly bracket.</rule>\n    <rule id=\"12\">Every field in the output format is MANDATORY and must be non-empty, except social_findings (empty array allowed when no social platform is listed) and competitor_insight (empty string allowed when no competitors are listed).</rule>\n    <rule id=\"13\">recommended_services must contain between 1 and 4 service names. estimated_deal_value must always be a USD range string in the exact form \"$500 - $1,500\". email subject must always be filled.</rule>\n  </rules>\n\n  <scoring>\n    <lead_score>Integer 0-100. Increase for: more fixable gaps, a reachable contact method, strong fit with the sender services, healthy review volume. Decrease for: nothing to improve, no contact method, poor fit.</lead_score>\n    <priority>high if lead_score is 70 or more; medium if 40 to 69; low if below 40.</priority>\n    <estimated_deal_value>A realistic USD range based on business type and the number of recommended services (more services means a higher range).</estimated_deal_value>\n  </scoring>\n\n  <output_format>\n    The JSON object has exactly these top-level keys, in this order:\n    <key name=\"lead_score\" type=\"integer\"/>\n    <key name=\"priority\" type=\"string\" allowed=\"high, medium, low\"/>\n    <key name=\"estimated_deal_value\" type=\"string\"/>\n    <key name=\"recommended_services\" type=\"array of strings\"/>\n    <key name=\"weaknesses\" type=\"array of short strings\"/>\n    <key name=\"analysis_summary\" type=\"string\" note=\"2-3 sentence internal summary for the sender\"/>\n    <key name=\"email\" type=\"object\">\n      <key name=\"subject\" type=\"string\" note=\"max 70 characters, specific to this business, no clickbait\"/>\n      <key name=\"opening\" type=\"string\" note=\"1-2 sentences: who the sender is and why they are writing; mention that you researched the business\"/>\n      <key name=\"website_findings\" type=\"array of strings\"/>\n      <key name=\"social_findings\" type=\"array of strings\"/>\n      <key name=\"competitor_insight\" type=\"string\"/>\n      <key name=\"solutions\" type=\"array of objects\" note=\"each object has the keys service and how_it_helps, both strings; how_it_helps is one sentence\"/>\n      <key name=\"closing_cta\" type=\"string\" note=\"1-2 sentences inviting a short call or a reply\"/>\n    </key>\n    <key name=\"whatsapp_message\" type=\"string\"/>\n  </output_format>\n</system_prompt>"
+        }
+      },
+      "id": "4d4aa651-eef6-45b7-8408-738c811f9d7c",
+      "name": "AI Lead Agent",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1.7,
+      "position": [
+        10144,
+        7088
+      ],
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 3000,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "list",
+          "value": "gpt-4o-mini"
+        },
+        "options": {
+          "temperature": 0.3
+        }
+      },
+      "id": "3745ee31-14e5-4e47-b7d6-d503925a1286",
+      "name": "Chat Model (replace with ANY LLM)",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.2,
+      "position": [
+        10144,
+        7328
+      ],
+      "credentials": {
+        "openAiApi": {
+          "id": null,
+          "name": "",
+          "__aiGatewayManaged": true
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const req = $('Prepare Request').first().json;\nconst base = $('Build AI Prompt').all();\nconst now = new Date();\nconst addDays = (n) => new Date(now.getTime() + n * 864e5).toISOString();\nconst esc = (v) => String(v === undefined || v === null ? '' : v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\"/g, '&quot;');\nconst arr = (v) => Array.isArray(v) ? v.map(x => String(x).trim()).filter(Boolean) : (v ? [String(v).trim()].filter(Boolean) : []);\nconst clamp = (n) => Math.max(0, Math.min(100, Math.round(Number(n) || 0)));\nconst nonEmpty = (v) => v !== undefined && v !== null && String(v).trim() !== '';\nconst cap = (s, n) => { s = String(s || '').trim(); return s.length > n ? s.slice(0, n - 1).trim() : s; };\nconst money = (n) => '$' + Number(n).toLocaleString('en-US');\nconst DIAL = { 'pakistan': '92', 'india': '91', 'united arab emirates': '971', 'uae': '971', 'united kingdom': '44', 'uk': '44', 'united states': '1', 'united states of america': '1', 'usa': '1', 'us': '1', 'canada': '1', 'saudi arabia': '966', 'australia': '61', 'germany': '49', 'turkey': '90', 'bangladesh': '880', 'qatar': '974', 'kuwait': '965', 'oman': '968', 'bahrain': '973', 'egypt': '20', 'south africa': '27', 'nigeria': '234', 'malaysia': '60', 'singapore': '65' };\nconst waLink = (phone, country) => {\n  const code = DIAL[String(country || '').toLowerCase().trim()];\n  let d = String(phone || '').replace(/\\D/g, '');\n  if (!d) return '';\n  if (String(phone).trim().startsWith('+')) return 'https://wa.me/' + d;\n  if (d.startsWith('00')) return 'https://wa.me/' + d.slice(2);\n  if (!code) return '';\n  if (d.startsWith('0')) d = code + d.slice(1);\n  else if (!d.startsWith(code)) d = code + d;\n  return 'https://wa.me/' + d;\n};\nconst pickEmail = (emails, website) => {\n  if (!emails || !emails.length) return '';\n  let dom = ''; try { dom = new URL(website).hostname.replace(/^www\\./, ''); } catch (e) {}\n  const own = emails.find(e => dom && e.endsWith('@' + dom));\n  return own || emails[0];\n};\n\n// ---- services helpers\nconst svcList = String(req.services || '').split(/[,;\\n|]+/).map(s => s.trim()).filter(Boolean);\nconst nrm = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();\nconst matchService = (s) => {\n  const n = nrm(s); if (!n) return '';\n  let hit = svcList.find(x => nrm(x) === n);\n  if (!hit) hit = svcList.find(x => { const m = nrm(x); return m && (m.indexOf(n) !== -1 || n.indexOf(m) !== -1); });\n  return hit || '';\n};\nconst serviceHelp = (s) => {\n  const t = String(s).toLowerCase();\n  if (/web|site|design|develop|landing|wordpress|shopify/.test(t)) return 'A fast, mobile-friendly website helps new customers find, trust and contact you.';\n  if (/seo|search|google|marketing/.test(t)) return 'Better search visibility brings more local customers to you without paying for every click.';\n  if (/automation|chatbot|bot|whatsapp|crm|ai/.test(t)) return 'Automating enquiries and follow-ups means no lead is missed and your team saves time.';\n  if (/social|ugc|video|content|brand|creative|ads/.test(t)) return 'Consistent, engaging content keeps your audience active and turns attention into enquiries.';\n  return 'Tailored to close the gaps we found in your online presence.';\n};\n\n// ---- robust JSON reader (repairs trailing commas, stray text, code fences)\nconst parseAI = (txt) => {\n  let t = String(txt || '').replace(/```json|```/gi, '').trim();\n  const a = t.indexOf('{'), b = t.lastIndexOf('}');\n  if (a < 0 || b <= a) return null;\n  t = t.slice(a, b + 1);\n  const noTrail = (s) => s.replace(/,(\\s*[}\\]])/g, '$1');\n  const attempts = [\n    (s) => s,\n    (s) => noTrail(s),\n    (s) => noTrail(s).replace(/[\\u0000-\\u001f]+/g, ' '),\n    (s) => noTrail(s).replace(/[\\u201c\\u201d]/g, '\"').replace(/[\\u0000-\\u001f]+/g, ' ')\n  ];\n  for (const f of attempts) { try { const o = JSON.parse(f(t)); if (o && typeof o === 'object') return o; } catch (e) {} }\n  return null;\n};\n\n// ---- complete fallback plan built only from scraped facts\nfunction fallbackPlan(l, email, phone) {\n  const hasSite = !!l.has_website;\n  const name = l.business_name;\n  const cat = String(l.category || 'local').toLowerCase();\n  const issues = (l.website_issues || []).slice();\n  const sa = l.social_activity || {};\n  const socialLines = [];\n  ['facebook', 'instagram'].forEach(p => {\n    const x = sa[p]; if (!x || x.days_inactive === '' || x.days_inactive === undefined) return;\n    const label = p.charAt(0).toUpperCase() + p.slice(1);\n    if (x.status === 'Active') socialLines.push('Your ' + label + ' page is active (last post ' + x.days_inactive + ' days ago); we can help turn that activity into enquiries.');\n    else socialLines.push('Your ' + label + ' page was last updated ' + x.days_inactive + ' days ago, which can reduce reach and trust.');\n  });\n  const text = issues.join(' ').toLowerCase();\n  const pool = svcList.length ? svcList : ['Website Development', 'SEO', 'Social Media Management'];\n  const pickBy = (re) => pool.filter(s => re.test(s));\n  const chosen = [];\n  const add = (a) => a.forEach(s => { if (!chosen.includes(s) && chosen.length < 4) chosen.push(s); });\n  if (!hasSite || (l.website_score || 0) < 60) add(pickBy(/web|site|design|develop|landing|wordpress|shopify/i));\n  if (!hasSite || /meta|h1|schema|title|alt text|analytics|open graph/.test(text)) add(pickBy(/seo|marketing|ads|google/i));\n  if (/whatsapp|chat|form|email or phone/.test(text)) add(pickBy(/automation|chatbot|bot|whatsapp|crm|ai/i));\n  const socialWeak = ['facebook', 'instagram'].some(p => sa[p] && (sa[p].status === 'Inactive' || sa[p].status === 'Slow')) || !Object.values(l.social || {}).some(Boolean);\n  if (socialWeak) add(pickBy(/social|ugc|video|content|brand|creative|ads/i));\n  if (!chosen.length) add(pool.slice(0, 2));\n  const score = clamp((100 - (l.website_score || 0)) * 0.7 + (email ? 15 : 0) + (phone ? 10 : 0));\n  const n = chosen.length || 1;\n  const lowBase = hasSite ? ((l.website_score || 0) < 50 ? 400 : 250) : 400;\n  const low = Math.round(lowBase * (1 + 0.5 * (n - 1)) / 50) * 50;\n  const high = Math.round(low * 2.5 / 100) * 100;\n  const comps = l.competitors || [];\n  let ci = '';\n  if (comps.length) {\n    const names = comps.slice(0, 2).map(c => c.name + ' (' + (c.rating || '-') + ' stars, ' + (c.reviews || 0) + ' reviews)').join(' and ');\n    const w = comps.filter(c => c.has_website).length;\n    ci = 'Nearby ' + cat + ' businesses such as ' + names + ' are building visibility online' + (w ? ', and ' + w + ' of the top ' + comps.length + ' have their own website.' : ', and none of the top ' + comps.length + ' has its own website yet.');\n  }\n  const wf = hasSite ? issues.slice(0, 5) : ['We could not find a dedicated website for ' + name + ', so people searching online for ' + cat + ' services cannot easily find or trust you.'];\n  const subject = cap(hasSite ? ((l.website_score || 0) < 60 ? 'Quick website improvements for ' + name : 'Ideas to grow ' + name + ' online') : 'Helping ' + name + ' get found online', 70);\n  const whatsapp = 'Hi ' + name + ' team, this is ' + req.user_name + ' from ' + req.company + '. I looked at your online presence and noticed ' + (hasSite ? 'a few quick website improvements that could bring you more enquiries' : 'you do not have a dedicated website yet, which may be costing you new customers') + '. We help with ' + chosen.slice(0, 3).join(', ') + '. Would you be open to a quick chat?';\n  return {\n    lead_score: score,\n    priority: score >= 70 ? 'high' : (score >= 40 ? 'medium' : 'low'),\n    deal: money(low) + ' - ' + money(high),\n    services: chosen,\n    weak: issues.slice(0, 5).concat(socialLines).slice(0, 6),\n    summary: name + ' has ' + (l.rating ? 'a ' + l.rating + '-star Google rating' : 'a Google listing') + (l.reviews ? ' with ' + l.reviews + ' reviews' : '') + ', but ' + (hasSite ? 'its website scores ' + (l.website_score || 0) + '/100' : 'it has no dedicated website') + '. ' + chosen.join(', ') + ' could help it win more customers online.',\n    subject: subject,\n    opening: 'I am ' + req.user_name + ' from ' + req.company + '. I recently researched ' + name + ' and noticed a few opportunities to strengthen your online presence.',\n    website_findings: wf,\n    social_findings: socialLines.slice(0, 3),\n    competitor_insight: ci,\n    solutions: chosen.map(s => ({ service: s, how_it_helps: serviceHelp(s) })),\n    closing_cta: 'I would love to share a few quick ideas with you. Would you be open to a short call or a reply to this email this week?',\n    whatsapp: whatsapp\n  };\n}\n\n// ---- merge AI output with fallback so every field is always filled\nfunction mergePlan(ai, fb) {\n  const A = ai || {}; const E = A.email || {};\n  const score = nonEmpty(A.lead_score) && isFinite(Number(A.lead_score)) ? clamp(A.lead_score) : fb.lead_score;\n  const pr = String(A.priority || '').toLowerCase();\n  const priority = ['high', 'medium', 'low'].includes(pr) ? pr : (ai ? (score >= 70 ? 'high' : (score >= 40 ? 'medium' : 'low')) : fb.priority);\n  let services = [];\n  arr(A.recommended_services).forEach(s => { const m = matchService(s); if (m && !services.includes(m)) services.push(m); });\n  services = services.slice(0, 4); if (!services.length) services = fb.services;\n  let solutions = [];\n  (Array.isArray(E.solutions) ? E.solutions : []).forEach(x => {\n    if (!x || !x.service) return;\n    const m = matchService(x.service); if (!m || solutions.find(y => y.service === m)) return;\n    solutions.push({ service: m, how_it_helps: nonEmpty(x.how_it_helps) ? String(x.how_it_helps).trim() : serviceHelp(m) });\n  });\n  if (!solutions.length) solutions = services.map(s => ({ service: s, how_it_helps: serviceHelp(s) }));\n  const wf = arr(E.website_findings).slice(0, 5);\n  return {\n    lead_score: score,\n    priority: priority,\n    deal: /\\$\\s?\\d/.test(String(A.estimated_deal_value || '')) ? String(A.estimated_deal_value).trim() : fb.deal,\n    services: services,\n    weak: arr(A.weaknesses).length ? arr(A.weaknesses) : fb.weak,\n    summary: nonEmpty(A.analysis_summary) ? String(A.analysis_summary).trim() : fb.summary,\n    email: {\n      subject: nonEmpty(E.subject) ? cap(E.subject, 120) : fb.subject,\n      opening: nonEmpty(E.opening) ? String(E.opening).trim() : fb.opening,\n      website_findings: wf.length ? wf : fb.website_findings,\n      social_findings: (ai && Array.isArray(E.social_findings)) ? arr(E.social_findings).slice(0, 3) : fb.social_findings,\n      competitor_insight: (ai && typeof E.competitor_insight === 'string') ? E.competitor_insight.trim() : fb.competitor_insight,\n      solutions: solutions,\n      closing_cta: nonEmpty(E.closing_cta) ? String(E.closing_cta).trim() : fb.closing_cta\n    },\n    whatsapp: nonEmpty(A.whatsapp_message) ? cap(A.whatsapp_message, 700) : fb.whatsapp\n  };\n}\n\nfunction buildEmail(l, e) {\n  const wf = e.website_findings, sf = e.social_findings, sol = e.solutions, comp = (l.competitors || []);\n  const sig = [esc(req.user_name)];\n  if (req.company && req.company !== req.user_name) sig.push(esc(req.company));\n  if (req.portfolio && /^https?:\\/\\//i.test(req.portfolio)) sig.push('<a href=\"' + esc(req.portfolio) + '\" style=\"color:#2563eb\">' + esc(req.portfolio) + '</a>');\n  if (req.user_phone) sig.push(esc(req.user_phone));\n  const h3 = 'style=\"margin:22px 0 8px;font-size:16px;color:#111827\"';\n  const ul = 'style=\"margin:0 0 12px;padding-left:20px\"';\n  let html = '<div style=\"font-family:Arial,Helvetica,sans-serif;max-width:640px;margin:0 auto;color:#1f2937;line-height:1.65;font-size:15px\">';\n  html += '<p>Hello ' + esc(l.business_name) + ' Team,</p>';\n  html += '<p>' + esc(e.opening) + '</p>';\n  if (wf.length) html += '<h3 ' + h3 + '>What we noticed on your website</h3><ul ' + ul + '>' + wf.map(x => '<li>' + esc(x) + '</li>').join('') + '</ul>';\n  if (sf.length) html += '<h3 ' + h3 + '>What we noticed on your social media</h3><ul ' + ul + '>' + sf.map(x => '<li>' + esc(x) + '</li>').join('') + '</ul>';\n  if (comp.length) {\n    html += '<h3 ' + h3 + '>How you compare locally</h3>';\n    if (e.competitor_insight) html += '<p style=\"margin:0 0 10px\">' + esc(e.competitor_insight) + '</p>';\n    const td = 'style=\"padding:8px 10px;border-bottom:1px solid #e5e7eb;font-size:14px\"';\n    const th = 'style=\"padding:8px 10px;text-align:left;background:#f3f4f6;font-size:13px;color:#374151\"';\n    html += '<table style=\"border-collapse:collapse;width:100%;margin:0 0 12px\"><tr><th ' + th + '>Business</th><th ' + th + '>Google rating</th><th ' + th + '>Reviews</th><th ' + th + '>Website</th></tr>';\n    html += '<tr style=\"background:#fffbeb\"><td ' + td + '><b>' + esc(l.business_name) + ' (you)</b></td><td ' + td + '>' + esc(l.rating || '-') + '</td><td ' + td + '>' + esc(l.reviews || 0) + '</td><td ' + td + '>' + (l.has_website ? 'Yes' : 'No') + '</td></tr>';\n    comp.forEach(c => { html += '<tr><td ' + td + '>' + esc(c.name) + '</td><td ' + td + '>' + esc(c.rating || '-') + '</td><td ' + td + '>' + esc(c.reviews || 0) + '</td><td ' + td + '>' + (c.has_website ? 'Yes' : 'No') + '</td></tr>'; });\n    html += '</table>';\n  }\n  if (sol.length) html += '<h3 ' + h3 + '>How we can help</h3><ul ' + ul + '>' + sol.map(s => '<li><b>' + esc(s.service) + '</b> - ' + esc(s.how_it_helps) + '</li>').join('') + '</ul>';\n  html += '<p>' + esc(e.closing_cta) + '</p>';\n  html += '<p style=\"margin-top:22px\">Best regards,<br><b>' + sig[0] + '</b>' + (sig.length > 1 ? '<br>' + sig.slice(1).join('<br>') : '') + '</p>';\n  html += '<p style=\"font-size:12px;color:#6b7280;margin-top:24px;border-top:1px solid #e5e7eb;padding-top:10px\">If this is not relevant, simply reply \"unsubscribe\" and we will not contact you again.</p></div>';\n\n  let t = 'Hello ' + l.business_name + ' Team,\\n\\n' + e.opening + '\\n';\n  if (wf.length) t += '\\nWhat we noticed on your website:\\n' + wf.map(x => ' - ' + x).join('\\n') + '\\n';\n  if (sf.length) t += '\\nWhat we noticed on your social media:\\n' + sf.map(x => ' - ' + x).join('\\n') + '\\n';\n  if (comp.length) t += '\\nHow you compare locally:\\n' + (e.competitor_insight ? e.competitor_insight + '\\n' : '') + ' - ' + l.business_name + ' (you): ' + (l.rating || '-') + ' stars, ' + (l.reviews || 0) + ' reviews, website: ' + (l.has_website ? 'yes' : 'no') + '\\n' + comp.map(c => ' - ' + c.name + ': ' + (c.rating || '-') + ' stars, ' + (c.reviews || 0) + ' reviews, website: ' + (c.has_website ? 'yes' : 'no')).join('\\n') + '\\n';\n  if (sol.length) t += '\\nHow we can help:\\n' + sol.map(s => ' - ' + s.service + ': ' + s.how_it_helps).join('\\n') + '\\n';\n  t += '\\n' + e.closing_cta + '\\n\\nBest regards,\\n' + req.user_name + (req.company && req.company !== req.user_name ? '\\n' + req.company : '') + (req.portfolio ? '\\n' + req.portfolio : '') + (req.user_phone ? '\\n' + req.user_phone : '');\n  return { html: html, text: t };\n}\n\nconst rows = [];\n$input.all().forEach((it, i) => {\n  const l = (base[i] || {}).json || {};\n  const raw = it.json && !it.json.error ? (it.json.output || it.json.text || '') : '';\n  const ai = raw ? parseAI(raw) : null;\n  const email = pickEmail(l.emails, l.website);\n  const phone = (l.phones && l.phones[0]) || l.phone || '';\n  const s = l.social || {};\n  const sa = l.social_activity || {};\n  const leadType = l.has_website ? 'Has Website' : 'No Website';\n  let channel = 'Social Only';\n  if (email && phone) channel = 'Email + Phone';\n  else if (email) channel = 'Email Only';\n  else if (phone) channel = 'Phone/WhatsApp Only';\n  else if (l.has_website) channel = 'Website Form Only';\n\n  const fb = fallbackPlan(l, email, phone);\n  const plan = mergePlan(ai, fb);\n  const mail = buildEmail(l, plan.email);\n  const wa = phone ? plan.whatsapp : '';\n  const summary = plan.summary + (ai ? '' : ' [Auto-draft: AI reply was unreadable, please review]');\n\n  const approval = email ? 'Pending Review' : 'No Email';\n  const emailStatus = email ? 'Draft' : 'No Email';\n  const comps = (l.competitors || []).map(c => c.name + ' (' + (c.rating || '-') + '*, ' + (c.reviews || 0) + ' reviews, ' + (c.has_website ? 'has website' : 'no website') + ')').join(' | ');\n  rows.push({ json: {\n    Run_ID: req.run_id,\n    Lead_ID: l.lead_id,\n    Business_Name: l.business_name,\n    Category: l.category,\n    Lead_Type: leadType,\n    Contact_Channel: channel,\n    Website: l.website || '',\n    Email: email,\n    Phone: phone,\n    WhatsApp_Link: waLink(phone, l.country),\n    Address: l.address,\n    Country: l.country,\n    Google_Rating: l.rating,\n    Google_Reviews: l.reviews,\n    Google_Maps_URL: l.maps_url,\n    Lead_Score: plan.lead_score,\n    Priority: plan.priority,\n    Estimated_Deal_Value: plan.deal,\n    Recommended_Services: plan.services.join(', '),\n    Weaknesses: plan.weak.join(' | '),\n    Analysis_Summary: summary,\n    Website_Score: l.has_website ? l.website_score : '',\n    Website_Status: l.website_status,\n    Website_Issues: (l.website_issues || []).join(' | '),\n    Website_Images: (l.website_images || []).filter(Boolean).join('\\n'),\n    Tech_Stack: l.tech || '',\n    Facebook_URL: s.facebook || '',\n    Instagram_URL: s.instagram || '',\n    LinkedIn_URL: s.linkedin || '',\n    Twitter_URL: s.twitter || '',\n    YouTube_URL: s.youtube || '',\n    TikTok_URL: s.tiktok || '',\n    Social_Status: l.social_summary || '',\n    Facebook_Last_Post: (sa.facebook && sa.facebook.last_post) || '',\n    Facebook_Days_Inactive: (sa.facebook && sa.facebook.days_inactive !== undefined) ? sa.facebook.days_inactive : '',\n    Instagram_Last_Post: (sa.instagram && sa.instagram.last_post) || '',\n    Instagram_Days_Inactive: (sa.instagram && sa.instagram.days_inactive !== undefined) ? sa.instagram.days_inactive : '',\n    Competitors: comps,\n    Email_Subject: plan.email.subject,\n    Email_Body_Text: mail.text,\n    Email_Body_HTML: mail.html,\n    WhatsApp_Message: wa,\n    Approval_Status: approval,\n    Email_Status: emailStatus,\n    Response_Status: 'No Reply',\n    Sender_Name: req.company || req.user_name,\n    Search_Query: req.search_query,\n    Created_At: now.toISOString(),\n    Email_Sent_At: '',\n    Follow_Up_1_Date: addDays(3),\n    Follow_Up_2_Date: addDays(7),\n    Gmail_Thread_ID: ''\n  } });\n});\nreturn rows;"
+      },
+      "id": "03dd9579-7a39-4783-b4b4-ebdecfac7447",
+      "name": "Build Lead Rows",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        10448,
+        7088
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "1HbLqujGyPTsVlh5g5pEq8ZDFW0swlzftpWHWVrnRBVY",
+          "mode": "list",
+          "cachedResultName": "Claude leads atomation ",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1HbLqujGyPTsVlh5g5pEq8ZDFW0swlzftpWHWVrnRBVY/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Sheet1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1HbLqujGyPTsVlh5g5pEq8ZDFW0swlzftpWHWVrnRBVY/edit#gid=0"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Lead_ID": "={{ $json.Lead_ID }}",
+            "Business_Name": "={{ $json.Business_Name }}",
+            "Category": "={{ $json.Category }}",
+            "Lead_Type": "={{ $json.Lead_Type }}",
+            "Contact_Channel": "={{ $json.Contact_Channel }}",
+            "Website": "={{ $json.Website }}",
+            "Email": "={{ $json.Email }}",
+            "Phone": "={{ $json.Phone }}",
+            "WhatsApp_Link": "={{ $json.WhatsApp_Link }}",
+            "Address": "={{ $json.Address }}",
+            "Country": "={{ $json.Country }}",
+            "Google_Rating": "={{ $json.Google_Rating }}",
+            "Google_Reviews": "={{ $json.Google_Reviews }}",
+            "Lead_Score": "={{ $json.Lead_Score }}",
+            "Priority": "={{ $json.Priority }}",
+            "Estimated_Deal_Value": "={{ $json.Estimated_Deal_Value }}",
+            "Recommended_Services": "={{ $json.Recommended_Services }}",
+            "Weaknesses": "={{ $json.Weaknesses }}",
+            "Analysis_Summary": "={{ $json.Analysis_Summary }}",
+            "Website_Score": "={{ $json.Website_Score }}",
+            "Website_Status": "={{ $json.Website_Status }}",
+            "Website_Issues": "={{ $json.Website_Issues }}",
+            "Tech_Stack": "={{ $json.Tech_Stack }}",
+            "Facebook_URL": "={{ $json.Facebook_URL }}",
+            "Instagram_URL": "={{ $json.Instagram_URL }}",
+            "LinkedIn_URL": "={{ $json.LinkedIn_URL }}",
+            "Twitter_URL": "={{ $json.Twitter_URL }}",
+            "YouTube_URL": "={{ $json.YouTube_URL }}",
+            "TikTok_URL": "={{ $json.TikTok_URL }}",
+            "Social_Status": "={{ $json.Social_Status }}",
+            "Facebook_Last_Post": "={{ $json.Facebook_Last_Post }}",
+            "Facebook_Days_Inactive": "={{ $json.Facebook_Days_Inactive }}",
+            "Instagram_Last_Post": "={{ $json.Instagram_Last_Post }}",
+            "Instagram_Days_Inactive": "={{ $json.Instagram_Days_Inactive }}",
+            "Email_Subject": "={{ $json.Email_Subject }}",
+            "Email_Body_Text": "={{ $json.Email_Body_Text }}",
+            "Email_Body_HTML": "={{ $json.Email_Body_HTML }}",
+            "Approval_Status": "={{ $json.Approval_Status }}",
+            "Email_Status": "={{ $json.Email_Status }}",
+            "Response_Status": "={{ $json.Response_Status }}",
+            "Sender_Name": "={{ $json.Sender_Name }}",
+            "Search_Query": "={{ $json.Search_Query }}",
+            "Created_At": "={{ $json.Created_At }}",
+            "Email_Sent_At": "={{ $json.Email_Sent_At }}",
+            "Follow_Up_1_Date": "={{ $json.Follow_Up_1_Date }}",
+            "Follow_Up_2_Date": "={{ $json.Follow_Up_2_Date }}",
+            "Gmail_Thread_ID": "={{ $json.Gmail_Thread_ID }}",
+            "                                                                                                Website_Images": "={{ $json.Website_Images }}",
+            "                                                                                                                                           Competitors": "={{ $json.Competitors }}",
+            "                                                                                                       WhatsApp_Message": "={{ $json.WhatsApp_Message }}",
+            "            Google_Maps_URL  ": "={{ $json.Google_Maps_URL }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "Lead_ID",
+              "displayName": "Lead_ID",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Business_Name",
+              "displayName": "Business_Name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Category",
+              "displayName": "Category",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Lead_Type",
+              "displayName": "Lead_Type",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Contact_Channel",
+              "displayName": "Contact_Channel",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Website",
+              "displayName": "Website",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Email",
+              "displayName": "Email",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Phone",
+              "displayName": "Phone",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "WhatsApp_Link",
+              "displayName": "WhatsApp_Link",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Address",
+              "displayName": "Address",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Country",
+              "displayName": "Country",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Google_Rating",
+              "displayName": "Google_Rating",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Google_Reviews",
+              "displayName": "Google_Reviews",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "            Google_Maps_URL  ",
+              "displayName": "            Google_Maps_URL  ",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Lead_Score",
+              "displayName": "Lead_Score",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Priority",
+              "displayName": "Priority",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Estimated_Deal_Value",
+              "displayName": "Estimated_Deal_Value",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Recommended_Services",
+              "displayName": "Recommended_Services",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Weaknesses",
+              "displayName": "Weaknesses",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Analysis_Summary",
+              "displayName": "Analysis_Summary",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Website_Score",
+              "displayName": "Website_Score",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Website_Status",
+              "displayName": "Website_Status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Website_Issues",
+              "displayName": "Website_Issues",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "                                                                                                Website_Images",
+              "displayName": "                                                                                                Website_Images",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Tech_Stack",
+              "displayName": "Tech_Stack",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Facebook_URL",
+              "displayName": "Facebook_URL",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Instagram_URL",
+              "displayName": "Instagram_URL",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "LinkedIn_URL",
+              "displayName": "LinkedIn_URL",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Twitter_URL",
+              "displayName": "Twitter_URL",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "YouTube_URL",
+              "displayName": "YouTube_URL",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "TikTok_URL",
+              "displayName": "TikTok_URL",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Social_Status",
+              "displayName": "Social_Status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Facebook_Last_Post",
+              "displayName": "Facebook_Last_Post",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Facebook_Days_Inactive",
+              "displayName": "Facebook_Days_Inactive",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Instagram_Last_Post",
+              "displayName": "Instagram_Last_Post",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Instagram_Days_Inactive",
+              "displayName": "Instagram_Days_Inactive",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "                                                                                                                                           Competitors",
+              "displayName": "                                                                                                                                           Competitors",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Email_Subject",
+              "displayName": "Email_Subject",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Email_Body_Text",
+              "displayName": "Email_Body_Text",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Email_Body_HTML",
+              "displayName": "Email_Body_HTML",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "                                                                                                       WhatsApp_Message",
+              "displayName": "                                                                                                       WhatsApp_Message",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Approval_Status",
+              "displayName": "Approval_Status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Email_Status",
+              "displayName": "Email_Status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Response_Status",
+              "displayName": "Response_Status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Sender_Name",
+              "displayName": "Sender_Name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Search_Query",
+              "displayName": "Search_Query",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Created_At",
+              "displayName": "Created_At",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Email_Sent_At",
+              "displayName": "Email_Sent_At",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Follow_Up_1_Date",
+              "displayName": "Follow_Up_1_Date",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Follow_Up_2_Date",
+              "displayName": "Follow_Up_2_Date",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Gmail_Thread_ID",
+              "displayName": "Gmail_Thread_ID",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {
+          "cellFormat": "RAW"
+        }
+      },
+      "id": "fae1148b-a2f4-4323-a6a8-a46e72800fa1",
+      "name": "Save Results to Master",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        10624,
+        7088
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "V98ZHoRnELPsKyPo",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "cd2dc953-0cdd-5fae-abc0-35999d1c5491",
+              "leftValue": "={{ $('Prepare Request').first().json.sheet_id ? 'yes' : 'no' }}",
+              "rightValue": "yes",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "22472b31-ad49-4331-8df0-456317b0808b",
+      "name": "Sheet Connected? (save)",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        10864,
+        7088
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('Prepare Request').first().json.sheet_id }}"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "={{ $('Prepare Request').first().json.sheet_tab }}"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Lead_ID": "={{ $json.Lead_ID }}",
+            "Business_Name": "={{ $json.Business_Name }}",
+            "Category": "={{ $json.Category }}",
+            "Lead_Type": "={{ $json.Lead_Type }}",
+            "Contact_Channel": "={{ $json.Contact_Channel }}",
+            "Website": "={{ $json.Website }}",
+            "Email": "={{ $json.Email }}",
+            "Phone": "={{ $json.Phone }}",
+            "WhatsApp_Link": "={{ $json.WhatsApp_Link }}",
+            "Address": "={{ $json.Address }}",
+            "Country": "={{ $json.Country }}",
+            "Google_Rating": "={{ $json.Google_Rating }}",
+            "Google_Reviews": "={{ $json.Google_Reviews }}",
+            "Google_Maps_URL": "={{ $json.Google_Maps_URL }}",
+            "Lead_Score": "={{ $json.Lead_Score }}",
+            "Priority": "={{ $json.Priority }}",
+            "Estimated_Deal_Value": "={{ $json.Estimated_Deal_Value }}",
+            "Recommended_Services": "={{ $json.Recommended_Services }}",
+            "Weaknesses": "={{ $json.Weaknesses }}",
+            "Analysis_Summary": "={{ $json.Analysis_Summary }}",
+            "Website_Score": "={{ $json.Website_Score }}",
+            "Website_Status": "={{ $json.Website_Status }}",
+            "Website_Issues": "={{ $json.Website_Issues }}",
+            "Website_Images": "={{ $json.Website_Images }}",
+            "Tech_Stack": "={{ $json.Tech_Stack }}",
+            "Facebook_URL": "={{ $json.Facebook_URL }}",
+            "Instagram_URL": "={{ $json.Instagram_URL }}",
+            "LinkedIn_URL": "={{ $json.LinkedIn_URL }}",
+            "Twitter_URL": "={{ $json.Twitter_URL }}",
+            "YouTube_URL": "={{ $json.YouTube_URL }}",
+            "TikTok_URL": "={{ $json.TikTok_URL }}",
+            "Social_Status": "={{ $json.Social_Status }}",
+            "Facebook_Last_Post": "={{ $json.Facebook_Last_Post }}",
+            "Facebook_Days_Inactive": "={{ $json.Facebook_Days_Inactive }}",
+            "Instagram_Last_Post": "={{ $json.Instagram_Last_Post }}",
+            "Instagram_Days_Inactive": "={{ $json.Instagram_Days_Inactive }}",
+            "Competitors": "={{ $json.Competitors }}",
+            "Email_Subject": "={{ $json.Email_Subject }}",
+            "Email_Body_Text": "={{ $json.Email_Body_Text }}",
+            "Email_Body_HTML": "={{ $json.Email_Body_HTML }}",
+            "WhatsApp_Message": "={{ $json.WhatsApp_Message }}",
+            "Approval_Status": "={{ $json.Approval_Status }}",
+            "Email_Status": "={{ $json.Email_Status }}",
+            "Response_Status": "={{ $json.Response_Status }}",
+            "Sender_Name": "={{ $json.Sender_Name }}",
+            "Search_Query": "={{ $json.Search_Query }}",
+            "Created_At": "={{ $json.Created_At }}",
+            "Email_Sent_At": "={{ $json.Email_Sent_At }}",
+            "Follow_Up_1_Date": "={{ $json.Follow_Up_1_Date }}",
+            "Follow_Up_2_Date": "={{ $json.Follow_Up_2_Date }}",
+            "Gmail_Thread_ID": "={{ $json.Gmail_Thread_ID }}"
+          },
+          "matchingColumns": [
+            "Lead_ID"
+          ],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {
+          "cellFormat": "RAW"
+        }
+      },
+      "id": "b6827bc8-2d3f-4a34-9bdb-808fb06cbd35",
+      "name": "Save to User Sheet",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        11104,
+        6992
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "V98ZHoRnELPsKyPo",
+          "name": "Google Sheets account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const req = $('Prepare Request').first().json;\nconst first = $input.first().json || {};\nlet rows = [], message = '', synced = 'No';\nif (first.__empty) {\n  message = first.message || 'No new leads found.';\n} else {\n  try { rows = $('Build Lead Rows').all().map(i => i.json); } catch (e) { rows = []; }\n  if (req.sheet_id) {\n    try {\n      const out = $('Save to User Sheet').all();\n      synced = out.some(i => i.json && i.json.error) ? 'Failed' : 'Yes';\n    } catch (e) { synced = 'Failed'; }\n  }\n  message = rows.length + ' new leads found.' + (req.sheet_id ? (synced === 'Yes' ? ' Also saved to your Google Sheet.' : ' Your Google Sheet could not be updated - please check that it is shared with the service email as Editor.') : '');\n}\nconst c = (fn) => rows.filter(fn).length;\nreturn [{ json: {\n  Run_ID: req.run_id,\n  Status: 'done',\n  Message: message,\n  Total: rows.length,\n  High_Priority: c(r => r.Priority === 'high'),\n  With_Email: c(r => !!r.Email),\n  No_Website: c(r => r.Lead_Type === 'No Website'),\n  Phone_Only: c(r => !r.Email && !!r.Phone),\n  Sheet_Synced: req.sheet_id ? synced : 'n/a',\n  Search_Query: req.search_query,\n  Client_Name: req.company,\n  Created_At: new Date().toISOString()\n} }];"
+      },
+      "id": "58c2260e-ca3b-4857-b95e-564fa08c23f6",
+      "name": "Build Run Meta",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        11344,
+        7168
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "1HbLqujGyPTsVlh5g5pEq8ZDFW0swlzftpWHWVrnRBVY",
+          "mode": "list",
+          "cachedResultName": "Claude leads atomation ",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1HbLqujGyPTsVlh5g5pEq8ZDFW0swlzftpWHWVrnRBVY/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Sheet1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1HbLqujGyPTsVlh5g5pEq8ZDFW0swlzftpWHWVrnRBVY/edit#gid=0"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Search_Query": "={{ $json.Search_Query }}",
+            "Created_At": "={{ $json.Created_At }}",
+            "Lead_ID": "={{ $('Save Results to Master').item.json.Lead_ID }}",
+            "Business_Name": "={{ $('Save Results to Master').item.json.Business_Name }}",
+            "Category": "={{ $('Save Results to Master').item.json.Category }}",
+            "Website": "={{ $('Normalize & Dedupe').item.json.website }}",
+            "Contact_Channel": "={{ $('Save Results to Master').item.json.Contact_Channel }}",
+            "Lead_Type": "={{ $('Save Results to Master').item.json.Lead_Type }}",
+            "Email": "={{ $('Save Results to Master').item.json.Email }}",
+            "Phone": "={{ $('Save Results to Master').item.json.Phone }}",
+            "WhatsApp_Link": "={{ $('Save Results to Master').item.json.WhatsApp_Link }}",
+            "Address": "={{ $('Save Results to Master').item.json.Address }}",
+            "Country": "={{ $('Save Results to Master').item.json.Country }}",
+            "Google_Rating": "={{ $('Save Results to Master').item.json.Google_Rating }}",
+            "Google_Reviews": "={{ $('Save Results to Master').item.json.Google_Reviews }}",
+            "Weaknesses": "={{ $('Save Results to Master').item.json.Weaknesses }}",
+            "Recommended_Services": "={{ $('Save Results to Master').item.json.Recommended_Services }}",
+            "Estimated_Deal_Value": "={{ $('Save Results to Master').item.json.Estimated_Deal_Value }}",
+            "Priority": "={{ $('Save Results to Master').item.json.Priority }}",
+            "Lead_Score": "={{ $('Save Results to Master').item.json.Lead_Score }}",
+            "Analysis_Summary": "={{ $('Save Results to Master').item.json.Analysis_Summary }}",
+            "Website_Score": "={{ $('Save Results to Master').item.json.Website_Score }}",
+            "Website_Status": "={{ $('Save Results to Master').item.json.Website_Status }}",
+            "Website_Issues": "={{ $('Save Results to Master').item.json.Website_Issues }}",
+            "                                                                                                Website_Images": "={{ $('Save Results to Master').item.json['                                                                                                Website_Images'] }}",
+            "                                                                                                       WhatsApp_Message": "={{ $('Save Results to Master').item.json['                                                                                                       WhatsApp_Message'] }}",
+            "Tech_Stack": "={{ $('Save Results to Master').item.json.Tech_Stack }}",
+            "Facebook_URL": "={{ $('Save Results to Master').item.json.Facebook_URL }}",
+            "Instagram_URL": "={{ $('Save Results to Master').item.json.Instagram_URL }}",
+            "LinkedIn_URL": "={{ $('Save Results to Master').item.json.LinkedIn_URL }}",
+            "Twitter_URL": "={{ $('Save Results to Master').item.json.Twitter_URL }}",
+            "YouTube_URL": "={{ $('Save Results to Master').item.json.YouTube_URL }}",
+            "Social_Status": "={{ $('Save Results to Master').item.json.Social_Status }}",
+            "TikTok_URL": "={{ $('Save Results to Master').item.json.TikTok_URL }}",
+            "Facebook_Last_Post": "={{ $('Save Results to Master').item.json.Facebook_Last_Post }}",
+            "Facebook_Days_Inactive": "={{ $('Save Results to Master').item.json.Facebook_Days_Inactive }}",
+            "Instagram_Last_Post": "={{ $('Save Results to Master').item.json.Instagram_Last_Post }}",
+            "Instagram_Days_Inactive": "={{ $('Save Results to Master').item.json.Instagram_Days_Inactive }}",
+            "                                                                                                                                           Competitors": "={{ $('Save Results to Master').item.json['                                                                                                                                           Competitors'] }}",
+            "Email_Body_Text": "={{ $('Save Results to Master').item.json.Email_Body_Text }}",
+            "Email_Subject": "={{ $('Save Results to Master').item.json.Email_Subject }}",
+            "Email_Body_HTML": "={{ $('Save Results to Master').item.json.Email_Body_HTML }}",
+            "Approval_Status": "={{ $('Save Results to Master').item.json.Approval_Status }}",
+            "Email_Status": "={{ $('Save Results to Master').item.json.Email_Status }}",
+            "Response_Status": "={{ $('Save Results to Master').item.json.Response_Status }}",
+            "Sender_Name": "={{ $('Save Results to Master').item.json.Sender_Name }}",
+            "Email_Sent_At": "={{ $('Save Results to Master').item.json.Email_Sent_At }}",
+            "Follow_Up_1_Date": "={{ $('Save Results to Master').item.json.Follow_Up_1_Date }}",
+            "Follow_Up_2_Date": "={{ $('Save Results to Master').item.json.Follow_Up_2_Date }}",
+            "Gmail_Thread_ID": "={{ $('Save Results to Master').item.json.Gmail_Thread_ID }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "Lead_ID",
+              "displayName": "Lead_ID",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Business_Name",
+              "displayName": "Business_Name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Category",
+              "displayName": "Category",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Lead_Type",
+              "displayName": "Lead_Type",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Contact_Channel",
+              "displayName": "Contact_Channel",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Website",
+              "displayName": "Website",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Email",
+              "displayName": "Email",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Phone",
+              "displayName": "Phone",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "WhatsApp_Link",
+              "displayName": "WhatsApp_Link",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Address",
+              "displayName": "Address",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Country",
+              "displayName": "Country",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Google_Rating",
+              "displayName": "Google_Rating",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Google_Reviews",
+              "displayName": "Google_Reviews",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "            Google_Maps_URL  ",
+              "displayName": "            Google_Maps_URL  ",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Lead_Score",
+              "displayName": "Lead_Score",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Priority",
+              "displayName": "Priority",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Estimated_Deal_Value",
+              "displayName": "Estimated_Deal_Value",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Recommended_Services",
+              "displayName": "Recommended_Services",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Weaknesses",
+              "displayName": "Weaknesses",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Analysis_Summary",
+              "displayName": "Analysis_Summary",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Website_Score",
+              "displayName": "Website_Score",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Website_Status",
+              "displayName": "Website_Status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Website_Issues",
+              "displayName": "Website_Issues",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "                                                                                                Website_Images",
+              "displayName": "                                                                                                Website_Images",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Tech_Stack",
+              "displayName": "Tech_Stack",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Facebook_URL",
+              "displayName": "Facebook_URL",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Instagram_URL",
+              "displayName": "Instagram_URL",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "LinkedIn_URL",
+              "displayName": "LinkedIn_URL",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Twitter_URL",
+              "displayName": "Twitter_URL",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "YouTube_URL",
+              "displayName": "YouTube_URL",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "TikTok_URL",
+              "displayName": "TikTok_URL",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Social_Status",
+              "displayName": "Social_Status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Facebook_Last_Post",
+              "displayName": "Facebook_Last_Post",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Facebook_Days_Inactive",
+              "displayName": "Facebook_Days_Inactive",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Instagram_Last_Post",
+              "displayName": "Instagram_Last_Post",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Instagram_Days_Inactive",
+              "displayName": "Instagram_Days_Inactive",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "                                                                                                                                           Competitors",
+              "displayName": "                                                                                                                                           Competitors",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Email_Subject",
+              "displayName": "Email_Subject",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Email_Body_Text",
+              "displayName": "Email_Body_Text",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Email_Body_HTML",
+              "displayName": "Email_Body_HTML",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "                                                                                                       WhatsApp_Message",
+              "displayName": "                                                                                                       WhatsApp_Message",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Approval_Status",
+              "displayName": "Approval_Status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Email_Status",
+              "displayName": "Email_Status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Response_Status",
+              "displayName": "Response_Status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Sender_Name",
+              "displayName": "Sender_Name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Search_Query",
+              "displayName": "Search_Query",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Created_At",
+              "displayName": "Created_At",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Email_Sent_At",
+              "displayName": "Email_Sent_At",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Follow_Up_1_Date",
+              "displayName": "Follow_Up_1_Date",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Follow_Up_2_Date",
+              "displayName": "Follow_Up_2_Date",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Gmail_Thread_ID",
+              "displayName": "Gmail_Thread_ID",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {
+          "cellFormat": "RAW"
+        }
+      },
+      "id": "7f5650f0-858f-4034-92c5-f45bcdca53f9",
+      "name": "Save Run Status",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        11584,
+        7168
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "V98ZHoRnELPsKyPo",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "f5074974-c6ba-578a-a065-5003ca8f3048",
+              "leftValue": "={{ ($('Prepare Request').first().json.email_summary && Number($('Build Run Meta').first().json.Total) > 0) ? 'yes' : 'no' }}",
+              "rightValue": "yes",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "98f576e4-670d-44ef-9f8c-6b8d9b55e512",
+      "name": "Email summary requested?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        11824,
+        7168
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const req = $('Prepare Request').first().json;\nconst rows = $('Build Lead Rows').all().map(i => i.json);\nconst c = (fn) => rows.filter(fn).length;\nconst sorted = rows.slice().sort((a, b) => (b.Lead_Score || 0) - (a.Lead_Score || 0));\nconst td = 'style=\"padding:7px 9px;border-bottom:1px solid #e5e7eb;font-size:13px\"';\nlet html = '<div style=\"font-family:Arial,sans-serif;max-width:760px;color:#1f2937;line-height:1.55\">';\nhtml += '<h2 style=\"margin:0 0 6px\">Lead generation complete</h2>';\nhtml += '<p style=\"margin:0 0 14px;color:#6b7280\">Search: ' + req.search_query + '</p>';\nhtml += '<table style=\"border-collapse:collapse;margin-bottom:16px\">';\n[['New leads saved', rows.length], ['High priority', c(r => r.Priority === 'high')], ['Email drafts waiting for your approval', c(r => r.Approval_Status === 'Pending Review')], ['Leads without a website', c(r => r.Lead_Type === 'No Website')], ['Phone/WhatsApp only (no email)', c(r => r.Contact_Channel === 'Phone/WhatsApp Only')]].forEach(x => { html += '<tr><td ' + td + '>' + x[0] + '</td><td ' + td + '><b>' + x[1] + '</b></td></tr>'; });\nhtml += '</table>';\nhtml += '<h3 style=\"margin:0 0 6px\">All ' + rows.length + ' leads (highest score first)</h3><table style=\"border-collapse:collapse;width:100%\"><tr style=\"background:#f3f4f6\"><th align=\"left\" ' + td + '>#</th><th align=\"left\" ' + td + '>Business</th><th align=\"left\" ' + td + '>Score</th><th align=\"left\" ' + td + '>Channel</th><th align=\"left\" ' + td + '>Website score</th><th align=\"left\" ' + td + '>Est. deal</th></tr>';\nsorted.forEach((r, i) => { html += '<tr><td ' + td + '>' + (i + 1) + '</td><td ' + td + '>' + r.Business_Name + '</td><td ' + td + '>' + r.Lead_Score + ' (' + r.Priority + ')</td><td ' + td + '>' + r.Contact_Channel + '</td><td ' + td + '>' + (r.Website_Score === '' ? 'No website' : r.Website_Score + '/100') + '</td><td ' + td + '>' + r.Estimated_Deal_Value + '</td></tr>'; });\nhtml += '</table>';\nhtml += '<p style=\"margin-top:16px\"><b>Next step:</b> open your Client Hunter page to read every email draft and WhatsApp message, and contact the leads you like.</p></div>';\nreturn [{ json: { to: req.user_email, subject: 'Lead run complete: ' + rows.length + ' new leads ready for review', html: html } }];"
+      },
+      "id": "09a6068e-2777-4a98-a274-05e88f0c12d7",
+      "name": "Build Summary",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        12064,
+        7088
+      ]
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $json.to }}",
+        "subject": "={{ $json.subject }}",
+        "message": "={{ $json.html }}",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "id": "064b7514-1b76-49c9-854c-e6cd58a00f13",
+      "name": "Email Summary to Owner",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        12304,
+        7088
+      ],
+      "webhookId": "2b7ddbde-47bb-4cde-8e2d-c1924fa69183",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "ieM4kycnavj4l7ys",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "content": "## 2) STATUS  (POST /webhook/client-hunter-status)\nInterface har ~5 second baad poochta hai. Workflow ka har step `Live` tab mein likha jata hai; yahan se interface ko naye events milte hain (live table + errors).",
+        "height": 170,
+        "width": 700,
+        "color": 5
+      },
+      "id": "09f8594d-2e9e-4e99-ad94-80e5b1919978",
+      "name": "Note 37",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        5024,
+        7680
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "client-hunter-status",
+        "responseMode": "responseNode",
+        "options": {
+          "allowedOrigins": "http://127.0.0.1:8080"
+        }
+      },
+      "id": "12fac83a-f545-4fe7-a683-0ed086e50763",
+      "name": "Status Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        5344,
+        7920
+      ],
+      "webhookId": "68c139c0-a750-5cac-b369-d4f81ea19a5f"
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw=$input.first().json||{};\nconst b=raw.body||raw;\nconst id=String(b.run_id||'').trim();\nconst ok=/^[A-Za-z0-9_-]{8,64}$/.test(id);\nreturn [{json:{run_id:ok?id:'',valid:ok,after:Number(b.after)||0}}];"
+      },
+      "id": "f1bf7c55-4b4c-42bf-bc2f-3fd0dcce1b31",
+      "name": "Parse Status Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        5584,
+        7920
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "={{ JSON.stringify($json.response) }}",
+        "options": {
+          "responseCode": 200,
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "name": "Access-Control-Allow-Origin",
+                "value": "*"
+              }
+            ]
+          }
+        }
+      },
+      "id": "37134937-fd4d-4e7f-a059-d0990122e60b",
+      "name": "Respond Status",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        6352,
+        7840
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## 3) CONNECT USER SHEET  (POST /webhook/client-hunter-connect)\nUser apni Google Sheet ka link deta hai -> access check -> khali ho to 51 column headings khud likh deta hai.\n**ACCESS CODES** `Parse Connect Request` mein bhi wahi likhein jo `Prepare Request1` mein hain.",
+        "height": 190,
+        "width": 700,
+        "color": 6
+      },
+      "id": "51b60ab2-63a3-4192-b72f-17d964902e10",
+      "name": "Note 47",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        5264,
+        8352
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "client-hunter-connect",
+        "responseMode": "responseNode",
+        "options": {
+          "allowedOrigins": "http://127.0.0.1:8080"
+        }
+      },
+      "id": "97aa2e26-9173-4344-b368-d74602951e0c",
+      "name": "Connect Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        5344,
+        8608
+      ],
+      "webhookId": "1e159ef6-6b4a-5200-b179-a3c94a1ed518"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ====== SETTINGS (service owner): Prepare Request1 wale same access codes yahan bhi likhein ======\nconst ACCESS_CODES = ['ali'];\n// ==================================================================================================\nconst raw = $input.first().json || {};\nconst b = raw.body || raw;\nconst bad = (msg) => [{ json: { ok: false, response: { ok: false, error: msg } } }];\nif (!ACCESS_CODES.includes(String(b.access_code || '').trim())) return bad('Invalid access code.');\nconst url = String(b.sheet_url || '').trim();\nconst m = url.match(/\\/d\\/([A-Za-z0-9_-]{20,100})/) || url.match(/^([A-Za-z0-9_-]{25,100})$/);\nif (!m) return bad('That does not look like a Google Sheet link.');\nreturn [{ json: { ok: true, sheet_id: m[1], meta_url: 'https://sheets.googleapis.com/v4/spreadsheets/' + m[1] + '?fields=properties.title,sheets.properties.title' } }];"
+      },
+      "id": "c08ef76e-e09b-45ff-9de4-05655f457870",
+      "name": "Parse Connect Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        5584,
+        8608
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "171d1d60-06ca-5301-9f32-3eb6c285b57a",
+              "leftValue": "={{ $json.ok ? 'yes' : 'no' }}",
+              "rightValue": "yes",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "ce58ce24-6e87-4466-b58f-944ad4a62a64",
+      "name": "Connect Input Valid?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        5824,
+        8608
+      ]
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.meta_url }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleSheetsOAuth2Api",
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          },
+          "timeout": 30000
+        }
+      },
+      "id": "0e70f830-7bd9-47c8-a90d-a8c8414d3824",
+      "name": "Check Sheet Access",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        6064,
+        8528
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "V98ZHoRnELPsKyPo",
+          "name": "Google Sheets account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "e53a3f15-a1e5-5cec-976f-846c1fdf7dd0",
+              "leftValue": "={{ $json.statusCode === 200 ? 'yes' : 'no' }}",
+              "rightValue": "yes",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "4d757a69-419d-4c70-9d2e-3952b4c467be",
+      "name": "Access OK?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        6304,
+        8528
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const sheetId = $('Parse Connect Request').first().json.sheet_id;\nconst body = $input.first().json.body || {};\nconst tab = (body.sheets && body.sheets[0] && body.sheets[0].properties && body.sheets[0].properties.title) || 'Sheet1';\nconst title = (body.properties && body.properties.title) || 'Google Sheet';\nconst range = encodeURIComponent(\"'\" + String(tab).replace(/'/g, \"''\") + \"'!A1:AZ1\");\nconst base = 'https://sheets.googleapis.com/v4/spreadsheets/' + sheetId + '/values/' + range;\nreturn [{ json: { sheet_id: sheetId, tab: tab, title: title, values_url: base, put_url: base + '?valueInputOption=RAW' } }];"
+      },
+      "id": "43b238e8-a1c9-42bf-90a0-16a712c3aece",
+      "name": "Prepare Header Check",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        6544,
+        8448
+      ]
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.values_url }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleSheetsOAuth2Api",
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          },
+          "timeout": 30000
+        }
+      },
+      "id": "53dbc273-efa8-48ac-857b-5df21189b643",
+      "name": "Read Header Row",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        6784,
+        8448
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "V98ZHoRnELPsKyPo",
+          "name": "Google Sheets account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "36ca2b38-5ace-559b-8ffa-8ae16f537cf9",
+              "leftValue": "={{ ($json.body && $json.body.values && $json.body.values[0] && $json.body.values[0].length) ? 'has' : 'empty' }}",
+              "rightValue": "empty",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "b14a9d3e-0ec5-4a62-b091-ab1b76ead244",
+      "name": "Needs Headers?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        7024,
+        8448
+      ]
+    },
+    {
+      "parameters": {
+        "method": "PUT",
+        "url": "={{ $('Prepare Header Check').first().json.put_url }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleSheetsOAuth2Api",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ values: [ [\"Lead_ID\", \"Business_Name\", \"Category\", \"Lead_Type\", \"Contact_Channel\", \"Website\", \"Email\", \"Phone\", \"WhatsApp_Link\", \"Address\", \"Country\", \"Google_Rating\", \"Google_Reviews\", \"Google_Maps_URL\", \"Lead_Score\", \"Priority\", \"Estimated_Deal_Value\", \"Recommended_Services\", \"Weaknesses\", \"Analysis_Summary\", \"Website_Score\", \"Website_Status\", \"Website_Issues\", \"Website_Images\", \"Tech_Stack\", \"Facebook_URL\", \"Instagram_URL\", \"LinkedIn_URL\", \"Twitter_URL\", \"YouTube_URL\", \"TikTok_URL\", \"Social_Status\", \"Facebook_Last_Post\", \"Facebook_Days_Inactive\", \"Instagram_Last_Post\", \"Instagram_Days_Inactive\", \"Competitors\", \"Email_Subject\", \"Email_Body_Text\", \"Email_Body_HTML\", \"WhatsApp_Message\", \"Approval_Status\", \"Email_Status\", \"Response_Status\", \"Sender_Name\", \"Search_Query\", \"Created_At\", \"Email_Sent_At\", \"Follow_Up_1_Date\", \"Follow_Up_2_Date\", \"Gmail_Thread_ID\"] ] }) }}",
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          },
+          "timeout": 30000
+        }
+      },
+      "id": "678af6d5-be58-43f7-8936-e5ce5dd5e598",
+      "name": "Write Headers",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        7264,
+        8368
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "V98ZHoRnELPsKyPo",
+          "name": "Google Sheets account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const get = (n) => { try { const it = $(n).first(); return it ? it.json : null; } catch (e) { return null; } };\nconst out = (o) => [{ json: { response: o } }];\nconst acc = get('Check Sheet Access'), meta = get('Prepare Header Check'), rd = get('Read Header Row'), wr = get('Write Headers');\nif (!acc || acc.statusCode !== 200 || !meta) {\n  const code = acc && acc.statusCode;\n  if (code === 404) return out({ ok: false, error: 'We could not find this sheet. Please check the link.' });\n  return out({ ok: false, error: 'We cannot open this sheet. Please share it with the service email as Editor and try again.' });\n}\nconst url = 'https://docs.google.com/spreadsheets/d/' + meta.sheet_id + '/edit';\nif (wr) {\n  if (wr.statusCode === 200) return out({ ok: true, sheet_id: meta.sheet_id, tab: meta.tab, title: meta.title, url: url, headers: 'created' });\n  return out({ ok: false, error: 'We could not prepare this sheet. Please make sure it is shared with the service email as Editor (not Viewer).' });\n}\nconst vals = (rd && rd.body && rd.body.values && rd.body.values[0]) || [];\nif (vals.indexOf('Lead_ID') === -1) return out({ ok: false, error: 'The first row of this sheet already contains other headings. Please connect a new blank sheet.' });\nreturn out({ ok: true, sheet_id: meta.sheet_id, tab: meta.tab, title: meta.title, url: url, headers: 'ok' });"
+      },
+      "id": "54f65dc0-348d-436c-86ae-53b030085129",
+      "name": "Build Connect Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        7504,
+        8528
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "={{ JSON.stringify($json.response) }}",
+        "options": {
+          "responseCode": 200,
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "name": "Access-Control-Allow-Origin",
+                "value": "*"
+              }
+            ]
+          }
+        }
+      },
+      "id": "38170ae4-a9fa-4053-ad94-daf8323a2d95",
+      "name": "Respond Connect",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        7744,
+        8608
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const req=$('Prepare Request').first().json;const base=(Date.now()-1750000000000)*1000;let n=0;\nconst mk=(Type,Stage,Level,Message,P)=>{let j=P?JSON.stringify(P):'';if(j.length>45000){delete P.Email_Body_HTML;j=JSON.stringify(P);}return {json:{Run_ID:req.run_id,Seq:String(base+n++),Type,Stage,Level,Message,Payload:j}};};\nconst it=$input.all().map(i=>i.json);\nlet ap='';try{const e=$('Run Google Maps Scraper').all().map(i=>i.json).find(j=>j&&j.error);if(e)ap=String(e.error.message||e.error).slice(0,200);}catch(e){}\nif(it[0]&&it[0].__empty)return [mk('stage','maps',ap?'error':'warn','Google Maps: '+it[0].message+(ap?' ('+ap+')':''))];\nconst out=[mk('stage','maps',ap?'warn':'info','Google Maps search done: '+it.length+' new leads found'+(ap?' (scraper warning: '+ap+')':''))];\nit.forEach(l=>out.push(mk('lead','maps','info','',{Lead_ID:l.lead_id,Business_Name:l.business_name,Category:l.category,Address:l.address,Phone:l.phone,Website:l.website,Google_Rating:l.rating,Google_Reviews:l.reviews,Google_Maps_URL:l.maps_url,Country:l.country})));\nreturn out;"
+      },
+      "name": "Live: Maps",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        6992,
+        6928
+      ],
+      "id": "bca107e7-e862-4c4d-acaa-2a66e119c7de"
+    },
+    {
+      "parameters": {
+        "jsCode": "const req=$('Prepare Request').first().json;const base=(Date.now()-1750000000000)*1000;let n=0;\nconst mk=(Type,Stage,Level,Message,P)=>{let j=P?JSON.stringify(P):'';if(j.length>45000){delete P.Email_Body_HTML;j=JSON.stringify(P);}return {json:{Run_ID:req.run_id,Seq:String(base+n++),Type,Stage,Level,Message,Payload:j}};};\nconst L=$input.all().map(i=>i.json);\nconst bad=L.filter(l=>l.has_website&&!l.website_reachable);\nconst out=[mk('stage','websites',bad.length?'warn':'info','Website audit done: '+L.filter(l=>l.has_website).length+' sites checked, '+L.filter(l=>!l.has_website).length+' have no website'+(bad.length?', '+bad.length+' not loading / blocked':''))];\nL.forEach(l=>out.push(mk('lead','websites','info','',{Lead_ID:l.lead_id,Lead_Type:l.has_website?'Has Website':'No Website',Website_Status:l.website_status,Website_Score:l.has_website?l.website_score:'',Website_Issues:(l.website_issues||[]).slice(0,4).join(' | '),Email:(l.emails||[])[0]||'',Phone:(l.phones||[])[0]||l.phone||'',Tech_Stack:l.tech||''})));\nreturn out;"
+      },
+      "name": "Live: Websites",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        8704,
+        6832
+      ],
+      "id": "a10c9b31-a0bd-4a83-895e-01b5acccf409"
+    },
+    {
+      "parameters": {
+        "jsCode": "const req=$('Prepare Request').first().json;const base=(Date.now()-1750000000000)*1000;let n=0;\nconst mk=(Type,Stage,Level,Message,P)=>{let j=P?JSON.stringify(P):'';if(j.length>45000){delete P.Email_Body_HTML;j=JSON.stringify(P);}return {json:{Run_ID:req.run_id,Seq:String(base+n++),Type,Stage,Level,Message,Payload:j}};};\nconst L=$input.all().map(i=>i.json);let jobs=0,bad=0;\ntry{jobs=$('Build Social Jobs').all().filter(j=>!j.json.no_jobs).length;bad=$('Run Social Scraper').all().filter(i=>i.json&&i.json.error).length;}catch(e){}\nconst msg=req.check_social?('Social media check done: '+jobs+' profiles checked'+(bad?', '+bad+' failed to load':'')):'Social media check skipped (switched off)';\nconst out=[mk('stage','social',bad?'warn':'info',msg)];\nL.forEach(l=>{const s=l.social||{};out.push(mk('lead','social','info','',{Lead_ID:l.lead_id,Social_Status:l.social_summary,Facebook_URL:s.facebook||'',Instagram_URL:s.instagram||'',LinkedIn_URL:s.linkedin||''}));});\nreturn out;"
+      },
+      "name": "Live: Social",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        9664,
+        6832
+      ],
+      "id": "c3d5a38b-9896-49d2-9bda-70a758433cf5"
+    },
+    {
+      "parameters": {
+        "jsCode": "const req=$('Prepare Request').first().json;const base=(Date.now()-1750000000000)*1000;let n=0;\nconst mk=(Type,Stage,Level,Message,P)=>{let j=P?JSON.stringify(P):'';if(j.length>45000){delete P.Email_Body_HTML;j=JSON.stringify(P);}return {json:{Run_ID:req.run_id,Seq:String(base+n++),Type,Stage,Level,Message,Payload:j}};};\nconst R=$input.all().map(i=>i.json);let ai=0;\ntry{ai=$('AI Lead Agent').all().filter(i=>i.json&&i.json.error).length;}catch(e){}\nconst out=[mk('stage','final',ai?'warn':'info','Messages written for '+R.length+' leads'+(ai?'. AI failed for '+ai+' leads - auto-drafts were used instead':''))];\nR.forEach(r=>out.push(mk('lead','final','info','',r)));\nreturn out;"
+      },
+      "name": "Live: Final",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        10448,
+        6832
+      ],
+      "id": "ed17a389-cb53-458d-84ed-400a662c12f9"
+    },
+    {
+      "parameters": {
+        "jsCode": "const req=$('Prepare Request').first().json;const base=(Date.now()-1750000000000)*1000;let n=0;\nconst mk=(Type,Stage,Level,Message,P)=>{let j=P?JSON.stringify(P):'';if(j.length>45000){delete P.Email_Body_HTML;j=JSON.stringify(P);}return {json:{Run_ID:req.run_id,Seq:String(base+n++),Type,Stage,Level,Message,Payload:j}};};\nconst m=$input.first().json;\nreturn [mk('done','done',/could not|Failed/.test(String(m.Message)+String(m.Sheet_Synced))?'warn':'info',m.Message,m)];"
+      },
+      "name": "Live: Done",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        11344,
+        6944
+      ],
+      "id": "7c4fced3-54a0-46da-8659-1448eb9e8cb5"
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "1HbLqujGyPTsVlh5g5pEq8ZDFW0swlzftpWHWVrnRBVY",
+          "mode": "list",
+          "cachedResultName": "Claude leads atomation ",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1HbLqujGyPTsVlh5g5pEq8ZDFW0swlzftpWHWVrnRBVY/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 1679058727,
+          "mode": "list",
+          "cachedResultName": "Live",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1HbLqujGyPTsVlh5g5pEq8ZDFW0swlzftpWHWVrnRBVY/edit#gid=1679058727"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "Run_ID",
+              "displayName": "Run_ID",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Seq",
+              "displayName": "Seq",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Type",
+              "displayName": "Type",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Stage",
+              "displayName": "Stage",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Level",
+              "displayName": "Level",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Message",
+              "displayName": "Message",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Payload",
+              "displayName": "Payload",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {
+          "cellFormat": "RAW"
+        }
+      },
+      "name": "Live: Append",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        11680,
+        6416
+      ],
+      "id": "fe1d6342-67f2-49d7-a3f8-0e16be80a793",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "L7A9wSTnl3xFFke0",
+          "name": "Google Sheets account 2"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "1HbLqujGyPTsVlh5g5pEq8ZDFW0swlzftpWHWVrnRBVY",
+          "mode": "list",
+          "cachedResultName": "Claude leads atomation ",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1HbLqujGyPTsVlh5g5pEq8ZDFW0swlzftpWHWVrnRBVY/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 1679058727,
+          "mode": "list",
+          "cachedResultName": "Live",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1HbLqujGyPTsVlh5g5pEq8ZDFW0swlzftpWHWVrnRBVY/edit#gid=1679058727"
+        },
+        "filtersUI": {
+          "values": [
+            {
+              "lookupColumn": "Run_ID",
+              "lookupValue": "={{ $json.run_id || 'no-run-id' }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Read Live Events",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        5856,
+        7888
+      ],
+      "id": "f260707a-4881-439b-b5a4-aa42db363d7f",
+      "alwaysOutputData": true,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "L7A9wSTnl3xFFke0",
+          "name": "Google Sheets account 2"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const p=$('Parse Status Request').first().json;\nif(!p.run_id)return [{json:{response:{status:'error',message:'Invalid request.'}}}];\nconst all=$input.all().map(i=>i.json);\nconst bad=all.find(j=>j&&j.error);\nconst diag=bad?String((bad.error&&bad.error.message)||bad.error).slice(0,200):'';\nconst after=Number(p.after)||0;\nconst rows=all.filter(r=>r&&r.Run_ID===p.run_id&&r.Seq).sort((a,b)=>Number(a.Seq)-Number(b.Seq));\nconst ev=rows.filter(r=>Number(r.Seq)>after);\nconst done=rows.find(r=>r.Type==='done');\nreturn [{json:{response:{status:ev.some(r=>r.Type==='done')?'done':'running',message:done?String(done.Message||''):'',diag:diag,events:ev.map(r=>({Seq:r.Seq,Type:r.Type,Stage:r.Stage,Level:r.Level,Message:r.Message,Payload:r.Payload}))}}}];"
+      },
+      "name": "Build Live Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        6096,
+        7856
+      ],
+      "id": "8386bcaf-f89e-4daf-925c-c974a7164f34"
+    },
+    {
+      "parameters": {
+        "content": "## SEND EMAIL  (POST /webhook/client-hunter-send)\nInterface ke 'Send email' button se request aati hai -> access code + email check -> Gmail se send -> Sheet1 mein Email_Status = Sent -> interface ko jawab.\n**ACCESS CODES** `Prepare Send` node ke upar likhe hain (baaki workflows jaise hi rakhein).",
+        "height": 190,
+        "width": 720,
+        "color": 4
+      },
+      "id": "c1305d50-7d24-4dc1-b451-b7db8ec885d7",
+      "name": "Note Send1",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        5616,
+        5744
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "client-hunter-send",
+        "responseMode": "responseNode",
+        "options": {
+          "allowedOrigins": "http://127.0.0.1:8080"
+        }
+      },
+      "id": "5b687b2e-9876-4dec-ba88-fcbd9f295e31",
+      "name": "Send Email Webhook1",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        5696,
+        6048
+      ],
+      "webhookId": "7b1c2d4e-5f60-4a71-8b92-c3d4e5f60718"
+    },
+    {
+      "parameters": {
+        "jsCode": "const ACCESS_CODES = ['ali'];\nconst raw = $input.first().json || {};\nconst b = raw.body || raw;\nconst s = (v) => (v === undefined || v === null) ? '' : String(v).trim();\nconst bad = (msg, code) => [{ json: { valid: false, status_code: code || 400, error: msg } }];\nif (!ACCESS_CODES.includes(s(b.access_code))) return bad('Invalid access code.', 401);\nconst rx = /^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$/;\nconst to = s(b.to), subject = s(b.subject).replace(/[\\r\\n]+/g, ' ').slice(0, 150), html = s(b.html), text = s(b.text);\nif (!rx.test(to)) return bad('Recipient email address is not valid.');\nif (!subject) return bad('Subject is empty.');\nif (!html && !text) return bad('Message is empty.');\nif (html.length > 150000) return bad('Message is too large.');\nconst replyTo = rx.test(s(b.reply_to)) ? s(b.reply_to) : '';\nconst bodyHtml = html || ('<div style=\"font-family:Arial,sans-serif;white-space:pre-wrap\">' + text.replace(/&/g,'&amp;').replace(/</g,'&lt;') + '</div>');\nreturn [{ json: { valid: true, lead_id: s(b.lead_id), to: to, subject: subject, html: bodyHtml, sender_name: s(b.sender_name).slice(0, 80), reply_to: replyTo } }];"
+      },
+      "id": "0a8c2b0b-96f3-4466-83e4-b52da045f678",
+      "name": "Prepare Send1",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        5936,
+        6048
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "se-cond-0004",
+              "leftValue": "={{ $json.valid ? 'yes' : 'no' }}",
+              "rightValue": "yes",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "d3db3c43-3620-4bf1-af75-2b7da30eb64e",
+      "name": "Send Request Valid?1",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        6176,
+        6048
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "={{ JSON.stringify({ ok: false, error: $json.error }) }}",
+        "options": {
+          "responseCode": "={{ $json.status_code || 400 }}",
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "name": "Access-Control-Allow-Origin",
+                "value": "*"
+              }
+            ]
+          }
+        }
+      },
+      "id": "af0dba6c-2960-4d27-becc-602afa2171c7",
+      "name": "Respond Send Rejected1",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        6416,
+        6240
+      ]
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $json.to }}",
+        "subject": "={{ $json.subject }}",
+        "message": "={{ $json.html }}",
+        "options": {
+          "appendAttribution": false,
+          "senderName": "={{ $json.sender_name }}",
+          "replyTo": "={{ $json.reply_to }}"
+        }
+      },
+      "id": "831b9f3b-6f80-47f8-b0a3-c161f27319fd",
+      "name": "Send Email via Gmail1",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        6416,
+        5936
+      ],
+      "webhookId": "9e4545a9-3974-424a-bcae-4485da0cdf91",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "ieM4kycnavj4l7ys",
+          "name": "Gmail account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const p = $('Prepare Send1').first().json;\nconst g = $input.first().json || {};\nconst err = g.error ? String((g.error.message || g.error)).slice(0, 250) : '';\nif (err || !g.id) return [{ json: { ok: false, response: { ok: false, error: 'Gmail could not send this email: ' + (err || 'no confirmation received') } } }];\nconst at = new Date().toISOString();\nreturn [{ json: { ok: true, lead_id: p.lead_id, sent_at: at, thread_id: g.threadId || '', response: { ok: true, thread_id: g.threadId || '', sent_at: at, lead_id: p.lead_id } } }];"
+      },
+      "id": "297c5113-b7e4-4430-8706-aa1db6a8efb0",
+      "name": "Build Send Result1",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        6656,
+        5936
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "se-cond-0009",
+              "leftValue": "={{ $json.ok ? 'yes' : 'no' }}",
+              "rightValue": "yes",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "896de844-51ae-44d2-83a0-5e8879a9afee",
+      "name": "Sent OK?1",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        6896,
+        5936
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "value": "1HbLqujGyPTsVlh5g5pEq8ZDFW0swlzftpWHWVrnRBVY",
+          "mode": "list",
+          "cachedResultName": "Claude leads atomation ",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1HbLqujGyPTsVlh5g5pEq8ZDFW0swlzftpWHWVrnRBVY/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Sheet1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1HbLqujGyPTsVlh5g5pEq8ZDFW0swlzftpWHWVrnRBVY/edit#gid=0"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Lead_ID": "={{ $json.lead_id }}",
+            "Email_Status": "Sent",
+            "Approval_Status": "Sent",
+            "Email_Sent_At": "={{ $json.sent_at }}",
+            "Gmail_Thread_ID": "={{ $json.thread_id }}"
+          },
+          "matchingColumns": [
+            "Lead_ID"
+          ],
+          "schema": [
+            {
+              "id": "Lead_ID",
+              "displayName": "Lead_ID",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Business_Name",
+              "displayName": "Business_Name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Category",
+              "displayName": "Category",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Lead_Type",
+              "displayName": "Lead_Type",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Contact_Channel",
+              "displayName": "Contact_Channel",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Website",
+              "displayName": "Website",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Email",
+              "displayName": "Email",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Phone",
+              "displayName": "Phone",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "WhatsApp_Link",
+              "displayName": "WhatsApp_Link",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Address",
+              "displayName": "Address",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Country",
+              "displayName": "Country",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Google_Rating",
+              "displayName": "Google_Rating",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Google_Reviews",
+              "displayName": "Google_Reviews",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "                                            Google_Maps_URL",
+              "displayName": "                                            Google_Maps_URL",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Lead_Score",
+              "displayName": "Lead_Score",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Priority",
+              "displayName": "Priority",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Estimated_Deal_Value",
+              "displayName": "Estimated_Deal_Value",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Recommended_Services",
+              "displayName": "Recommended_Services",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Weaknesses",
+              "displayName": "Weaknesses",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Analysis_Summary",
+              "displayName": "Analysis_Summary",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Website_Score",
+              "displayName": "Website_Score",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Website_Status",
+              "displayName": "Website_Status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Website_Issues",
+              "displayName": "Website_Issues",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "                                                                                                Website_Images",
+              "displayName": "                                                                                                Website_Images",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Tech_Stack",
+              "displayName": "Tech_Stack",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Facebook_URL",
+              "displayName": "Facebook_URL",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Instagram_URL",
+              "displayName": "Instagram_URL",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "LinkedIn_URL",
+              "displayName": "LinkedIn_URL",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Twitter_URL",
+              "displayName": "Twitter_URL",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "YouTube_URL",
+              "displayName": "YouTube_URL",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "TikTok_URL",
+              "displayName": "TikTok_URL",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Social_Status",
+              "displayName": "Social_Status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Facebook_Last_Post",
+              "displayName": "Facebook_Last_Post",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Facebook_Days_Inactive",
+              "displayName": "Facebook_Days_Inactive",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Instagram_Last_Post",
+              "displayName": "Instagram_Last_Post",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Instagram_Days_Inactive",
+              "displayName": "Instagram_Days_Inactive",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "                                                                                                                                           Competitors",
+              "displayName": "                                                                                                                                           Competitors",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Email_Subject",
+              "displayName": "Email_Subject",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Email_Body_Text",
+              "displayName": "Email_Body_Text",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Email_Body_HTML",
+              "displayName": "Email_Body_HTML",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "                                                                                                       WhatsApp_Message",
+              "displayName": "                                                                                                       WhatsApp_Message",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Approval_Status",
+              "displayName": "Approval_Status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Email_Status",
+              "displayName": "Email_Status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Response_Status",
+              "displayName": "Response_Status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Sender_Name",
+              "displayName": "Sender_Name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Search_Query",
+              "displayName": "Search_Query",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Created_At",
+              "displayName": "Created_At",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Email_Sent_At",
+              "displayName": "Email_Sent_At",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Follow_Up_1_Date",
+              "displayName": "Follow_Up_1_Date",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Follow_Up_2_Date",
+              "displayName": "Follow_Up_2_Date",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Gmail_Thread_ID",
+              "displayName": "Gmail_Thread_ID",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "row_number",
+              "displayName": "row_number",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "readOnly": true,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {
+          "cellFormat": "RAW"
+        }
+      },
+      "id": "dda8d0d7-0478-458a-ad25-c51974a854c1",
+      "name": "Mark Lead as Sent1",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        7136,
+        5840
+      ],
+      "alwaysOutputData": true,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "V98ZHoRnELPsKyPo",
+          "name": "Google Sheets account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "={{ JSON.stringify($('Build Send Result1').first().json.response) }}",
+        "options": {
+          "responseCode": 200,
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "name": "Access-Control-Allow-Origin",
+                "value": "*"
+              }
+            ]
+          }
+        }
+      },
+      "id": "80afdfd5-a032-42b0-a89c-6b3e85202a4f",
+      "name": "Respond Send Result1",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        7376,
+        5936
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Live: Start1": {
+      "main": [
+        [
+          {
+            "node": "Live: Append",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Start Webhook": {
+      "main": [
+        [
+          {
+            "node": "Prepare Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Request": {
+      "main": [
+        [
+          {
+            "node": "Request Valid?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Request Valid?": {
+      "main": [
+        [
+          {
+            "node": "Respond Started",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond Rejected",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Respond Started": {
+      "main": [
+        [
+          {
+            "node": "Live: Start1",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Run Google Maps Scraper",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run Google Maps Scraper": {
+      "main": [
+        [
+          {
+            "node": "Sheet Connected? (read)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sheet Connected? (read)": {
+      "main": [
+        [
+          {
+            "node": "Read Existing Leads",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Normalize & Dedupe",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Existing Leads": {
+      "main": [
+        [
+          {
+            "node": "Normalize & Dedupe",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize & Dedupe": {
+      "main": [
+        [
+          {
+            "node": "Live: Maps",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Any New Leads?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Any New Leads?": {
+      "main": [
+        [
+          {
+            "node": "Has Website?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Build Run Meta",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Website?": {
+      "main": [
+        [
+          {
+            "node": "Fetch Homepage",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Prepare No-Website Lead",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Homepage": {
+      "main": [
+        [
+          {
+            "node": "Parse Homepage",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Homepage": {
+      "main": [
+        [
+          {
+            "node": "Fetch Contact Page",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Contact Page": {
+      "main": [
+        [
+          {
+            "node": "Merge Contact Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge Contact Data": {
+      "main": [
+        [
+          {
+            "node": "Merge Leads",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare No-Website Lead": {
+      "main": [
+        [
+          {
+            "node": "Merge Leads",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Merge Leads": {
+      "main": [
+        [
+          {
+            "node": "Live: Websites",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Build Social Jobs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Social Jobs": {
+      "main": [
+        [
+          {
+            "node": "Has Social Jobs?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Social Jobs?": {
+      "main": [
+        [
+          {
+            "node": "Run Social Scraper",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Attach Social Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run Social Scraper": {
+      "main": [
+        [
+          {
+            "node": "Attach Social Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Attach Social Results": {
+      "main": [
+        [
+          {
+            "node": "Live: Social",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Build AI Prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build AI Prompt": {
+      "main": [
+        [
+          {
+            "node": "AI Lead Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Lead Agent": {
+      "main": [
+        [
+          {
+            "node": "Build Lead Rows",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Chat Model (replace with ANY LLM)": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Lead Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Lead Rows": {
+      "main": [
+        [
+          {
+            "node": "Live: Final",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Save Results to Master",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save Results to Master": {
+      "main": [
+        [
+          {
+            "node": "Sheet Connected? (save)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sheet Connected? (save)": {
+      "main": [
+        [
+          {
+            "node": "Save to User Sheet",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Build Run Meta",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save to User Sheet": {
+      "main": [
+        [
+          {
+            "node": "Build Run Meta",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Run Meta": {
+      "main": [
+        [
+          {
+            "node": "Live: Done",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Save Run Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save Run Status": {
+      "main": [
+        [
+          {
+            "node": "Email summary requested?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Email summary requested?": {
+      "main": [
+        [
+          {
+            "node": "Build Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Summary": {
+      "main": [
+        [
+          {
+            "node": "Email Summary to Owner",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Status Webhook": {
+      "main": [
+        [
+          {
+            "node": "Parse Status Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Status Request": {
+      "main": [
+        [
+          {
+            "node": "Read Live Events",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Connect Webhook": {
+      "main": [
+        [
+          {
+            "node": "Parse Connect Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Connect Request": {
+      "main": [
+        [
+          {
+            "node": "Connect Input Valid?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Connect Input Valid?": {
+      "main": [
+        [
+          {
+            "node": "Check Sheet Access",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond Connect",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Sheet Access": {
+      "main": [
+        [
+          {
+            "node": "Access OK?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Access OK?": {
+      "main": [
+        [
+          {
+            "node": "Prepare Header Check",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Build Connect Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Header Check": {
+      "main": [
+        [
+          {
+            "node": "Read Header Row",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Header Row": {
+      "main": [
+        [
+          {
+            "node": "Needs Headers?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Needs Headers?": {
+      "main": [
+        [
+          {
+            "node": "Write Headers",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Build Connect Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Write Headers": {
+      "main": [
+        [
+          {
+            "node": "Build Connect Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Connect Response": {
+      "main": [
+        [
+          {
+            "node": "Respond Connect",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Live: Maps": {
+      "main": [
+        [
+          {
+            "node": "Live: Append",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Live: Websites": {
+      "main": [
+        [
+          {
+            "node": "Live: Append",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Live: Social": {
+      "main": [
+        [
+          {
+            "node": "Live: Append",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Live: Final": {
+      "main": [
+        [
+          {
+            "node": "Live: Append",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Live: Done": {
+      "main": [
+        [
+          {
+            "node": "Live: Append",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Live Events": {
+      "main": [
+        [
+          {
+            "node": "Build Live Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Live Response": {
+      "main": [
+        [
+          {
+            "node": "Respond Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Email Webhook1": {
+      "main": [
+        [
+          {
+            "node": "Prepare Send1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Send1": {
+      "main": [
+        [
+          {
+            "node": "Send Request Valid?1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Request Valid?1": {
+      "main": [
+        [
+          {
+            "node": "Send Email via Gmail1",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond Send Rejected1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Email via Gmail1": {
+      "main": [
+        [
+          {
+            "node": "Build Send Result1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Send Result1": {
+      "main": [
+        [
+          {
+            "node": "Sent OK?1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sent OK?1": {
+      "main": [
+        [
+          {
+            "node": "Mark Lead as Sent1",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond Send Result1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark Lead as Sent1": {
+      "main": [
+        [
+          {
+            "node": "Respond Send Result1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "ef08a61b-c223-4d4e-a403-facf7e0d57d5",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "a9bf17c49da854f566565195dbc99ea5db636251bf9752cfa339fcba8d64b553"
+  },
+  "nodeGroups": [],
+  "id": "mg0gaCvWajopc9Kz",
+  "tags": []
+}

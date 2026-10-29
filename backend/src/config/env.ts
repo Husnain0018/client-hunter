@@ -26,6 +26,9 @@ const schema = z.object({
   SMTP_USER: z.string().optional().default(''),
   SMTP_PASSWORD: z.string().optional().default(''),
   SMTP_FROM: z.string().optional().default(''),
+  BAILEYS_SESSION_DIR: z.string().default('./data/baileys_auth'),
+  BAILEYS_LOG_LEVEL: z.string().default('warn'),
+  // Deprecated WAHA settings retained as optional for backwards-compatibility
   WAHA_BASE_URL: z.string().optional().default(''),
   WAHA_API_KEY: z.string().optional().default(''),
   WAHA_SESSION: z.string().default('default'),
