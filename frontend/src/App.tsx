@@ -3,12 +3,15 @@ import {
   Building2, Check, ChevronDown, Copy, ExternalLink, FileSpreadsheet, Globe2,
   Loader2, Mail, MapPin, MessageCircle, Plus, Search, ShieldCheck, Sparkles,
   Star, Trash2, X, AlertCircle, CheckCircle2, TrendingUp, Clock, HelpCircle,
-  Lightbulb, ListChecks, QrCode
+  Lightbulb, ListChecks, QrCode, Compass
 } from 'lucide-react';
 import { api } from './api/client';
 import { ErrorBoundary } from './components/ErrorBoundary';
+import { ThemeToggle } from './components/ThemeToggle';
 import { ClientHandlerPage } from './pages/ClientHandlerPage';
 import { WhatsAppPage } from './pages/WhatsAppPage';
+import { JobFinderPage } from './pages/JobFinderPage';
+import { useTheme } from './utils/theme';
 import type { CustomService, Lead, LeadStats, LocationStatus, OutreachStrategy, Run, RunEvent, SearchForm, WhatsAppStatus } from './types';
 import './styles.css';
 
@@ -135,7 +138,8 @@ function downloadCsv(leads: Lead[]): void {
 }
 
 export default function App() {
-  const [currentPage, setCurrentPage] = useState<'prospecting' | 'client-handler' | 'whatsapp'>('prospecting');
+  useTheme();
+  const [currentPage, setCurrentPage] = useState<'prospecting' | 'client-handler' | 'whatsapp' | 'job-finder'>('prospecting');
   const [waState, setWaState] = useState<string>('not_connected');
   const [token, setToken] = useState(api.token);
   const [accessCode, setAccessCode] = useState('');
@@ -544,6 +548,9 @@ export default function App() {
   if (!token) {
     return (
       <div className="auth-shell">
+        <div className="auth-theme-corner">
+          <ThemeToggle />
+        </div>
         <div className="auth-card">
           <div className="brand-mark"><Search size={20} /></div>
           <p className="eyebrow">CLIENT HUNTER</p>
@@ -649,10 +656,31 @@ export default function App() {
                   <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#f59e0b', display: 'inline-block' }} title="Waiting for QR scan" />
                 ) : null}
               </button>
+              <button
+                type="button"
+                onClick={() => setCurrentPage('job-finder')}
+                style={{
+                  background: currentPage === 'job-finder' ? 'linear-gradient(135deg, #06b6d4, #4f46e5)' : 'transparent',
+                  color: '#fff',
+                  border: currentPage === 'job-finder' ? '1px solid rgba(6,182,212,0.6)' : '1px solid transparent',
+                  padding: '6px 14px',
+                  borderRadius: 999,
+                  fontSize: '12px',
+                  fontWeight: 700,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  cursor: 'pointer'
+                }}
+              >
+                <Compass size={13} />
+                AI Job Finder
+              </button>
             </nav>
           </div>
           <div className="top-actions">
             <span className="status-chip"><span className="status-dot" /> Backend connected</span>
+            <ThemeToggle />
             <button className="button ghost" onClick={() => { api.logout(); setToken(null); }}>Sign out</button>
           </div>
         </div>
@@ -666,6 +694,10 @@ export default function App() {
       ) : currentPage === 'whatsapp' ? (
         <WhatsAppPage
           onNavigateToClientHandler={() => setCurrentPage('client-handler')}
+        />
+      ) : currentPage === 'job-finder' ? (
+        <JobFinderPage
+          onBackToProspecting={() => setCurrentPage('prospecting')}
         />
       ) : (
         <>
@@ -752,9 +784,9 @@ export default function App() {
                 {previewGreeting && (
                   <div style={{
                     fontSize: '12px',
-                    color: '#475569',
-                    background: '#f8fafc',
-                    border: '1px solid #e2e8f0',
+                    color: 'var(--ink-2)',
+                    background: 'var(--surface-2)',
+                    border: '1px solid var(--line)',
                     borderRadius: '8px',
                     padding: '8px 12px',
                     display: 'flex',
@@ -1514,10 +1546,10 @@ function LeadCard({
                 <iframe title="Email preview" className="email-preview" sandbox="" srcDoc={emailHtml} />
               </div>
             ) : (
-              <div style={{ padding: 24, textAlign: 'center', background: '#fff', borderRadius: 12, border: '1px solid #e2e8f0' }}>
-                <Mail size={32} style={{ color: '#94a3b8', margin: '0 auto 10px' }} />
-                <h4 style={{ margin: '0 0 6px', color: '#1e293b' }}>No verified email found for {lead.businessName}</h4>
-                <p style={{ margin: 0, fontSize: 13, color: '#64748b', maxWidth: 460, marginInline: 'auto' }}>
+              <div style={{ padding: 24, textAlign: 'center', background: 'var(--surface)', borderRadius: 12, border: '1px solid var(--line)' }}>
+                <Mail size={32} style={{ color: 'var(--muted)', margin: '0 auto 10px' }} />
+                <h4 style={{ margin: '0 0 6px', color: 'var(--ink)' }}>No verified email found for {lead.businessName}</h4>
+                <p style={{ margin: 0, fontSize: 13, color: 'var(--muted)', maxWidth: 460, marginInline: 'auto' }}>
                   To avoid spam and protect domain deliverability, email drafts are only prepared when a verified address is found on the company website. Use <strong>WhatsApp</strong> or phone calling instead.
                 </p>
               </div>

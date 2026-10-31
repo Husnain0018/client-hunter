@@ -6,7 +6,19 @@ export class EmailNotConfiguredError extends Error {
   constructor() { super('SMTP is not configured. Use the Gmail or mail-client link, or configure SMTP on the backend.'); }
 }
 
-export async function sendEmail(input: { to: string; subject: string; html: string; text: string; replyTo?: string }): Promise<{ messageId: string }> {
+export async function sendEmail(input: {
+  to: string;
+  subject: string;
+  html: string;
+  text: string;
+  replyTo?: string;
+  attachments?: Array<{
+    filename: string;
+    content?: Buffer | string;
+    path?: string;
+    contentType?: string;
+  }>;
+}): Promise<{ messageId: string }> {
   if (!env.SMTP_HOST || !env.SMTP_USER || !env.SMTP_PASSWORD || !env.SMTP_FROM) throw new EmailNotConfiguredError();
   const transport = nodemailer.createTransport({
     host: env.SMTP_HOST,
@@ -17,6 +29,14 @@ export async function sendEmail(input: { to: string; subject: string; html: stri
     greetingTimeout: 10_000,
     socketTimeout: 15_000,
   });
-  const result = await transport.sendMail({ from: env.SMTP_FROM, to: input.to, replyTo: input.replyTo || undefined, subject: input.subject, text: input.text, html: cleanEmailHtml(input.html) });
+  const result = await transport.sendMail({
+    from: env.SMTP_FROM,
+    to: input.to,
+    replyTo: input.replyTo || undefined,
+    subject: input.subject,
+    text: input.text,
+    html: cleanEmailHtml(input.html),
+    attachments: input.attachments,
+  });
   return { messageId: result.messageId };
 }

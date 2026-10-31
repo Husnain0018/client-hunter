@@ -2,8 +2,8 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { authenticate } from '../security/auth.js';
 import type { Database } from '../db/database.js';
-import { ClientHandlerService } from '../services/clientHandlerService.js';
-import { BaileysManager } from '../services/baileysManager.js';
+import { ClientHandlerService, clientHandlerEvents } from '../services/clientHandlerService.js';
+import { BaileysManager, normalizeToInternationalWhatsApp } from '../services/baileysManager.js';
 import type { ClientStage } from '../types/domain.js';
 
 const clientStageEnum = z.enum([
@@ -68,6 +68,89 @@ export async function clientHandlerRoutes(app: FastifyInstance, options: { datab
       const clients = service.listClients(query.stage, query.q);
       const stats = service.getStats();
       return { ok: true, clients, stats };
+    });
+
+    // Real-time Server-Sent Events (SSE) stream for incoming/outgoing messages & status updates
+    authedApp.get('/api/clients/events', async (request, reply) => {
+      reply.raw.writeHead(200, {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache, no-transform',
+        Connection: 'keep-alive',
+        'X-Accel-Buffering': 'no',
+        'Access-Control-Allow-Origin': request.headers.origin || '*',
+      });
+
+      const writeEvent = (eventType: string, payload: unknown) => {
+        try {
+          if (!reply.raw.writableEnded) {
+            reply.raw.write(`data: ${JSON.stringify({ type: eventType, ...(payload as object) })}\n\n`);
+          }
+        } catch {
+          // Socket closed
+        }
+      };
+
+      // Initial snapshot acknowledgment
+      writeEvent('connected', {
+        timestamp: new Date().toISOString(),
+        stats: service.getStats(),
+      });
+
+      const onMessageReceived = (data: any) => writeEvent('message_received', { ...data, stats: service.getStats() });
+      const onMessageSent = (data: any) => writeEvent('message_sent', { ...data, stats: service.getStats() });
+      const onConversationUpdated = (data: any) =>
+        writeEvent('conversation_updated', { ...data, stats: service.getStats() });
+      const onMessageStatus = (data: any) => writeEvent('message_status', data);
+
+      clientHandlerEvents.on('message_received', onMessageReceived);
+      clientHandlerEvents.on('message_sent', onMessageSent);
+      clientHandlerEvents.on('conversation_updated', onConversationUpdated);
+      baileys.events.on('message_status', onMessageStatus);
+
+      const heartbeat = setInterval(() => {
+        try {
+          if (!reply.raw.writableEnded) {
+            reply.raw.write(`: heartbeat ${Date.now()}\n\n`);
+          }
+        } catch {
+          // Socket closed
+        }
+      }, 15_000);
+
+      request.raw.on('close', () => {
+        clearInterval(heartbeat);
+        clientHandlerEvents.off('message_received', onMessageReceived);
+        clientHandlerEvents.off('message_sent', onMessageSent);
+        clientHandlerEvents.off('conversation_updated', onConversationUpdated);
+        baileys.events.off('message_status', onMessageStatus);
+      });
+
+      await new Promise<void>((resolve) => {
+        request.raw.on('close', resolve);
+      });
+    });
+
+    // Link an unmatched inbound WhatsApp contact to an existing lead
+    authedApp.post('/api/clients/:leadId/link-lead', async (request, reply) => {
+      const { leadId } = request.params as { leadId: string };
+      const parsed = z.object({
+        targetLeadId: z.string().trim().min(1),
+      }).safeParse(request.body);
+
+      if (!parsed.success) {
+        return reply.code(400).send({ ok: false, error: 'Valid targetLeadId is required.' });
+      }
+
+      try {
+        const client = service.linkUnmatchedLead(leadId, parsed.data.targetLeadId);
+        const stats = service.getStats();
+        return { ok: true, client, stats };
+      } catch (err) {
+        return reply.code(400).send({
+          ok: false,
+          error: err instanceof Error ? err.message : 'Failed to link unmatched contact to lead.',
+        });
+      }
     });
 
     // Single client record
@@ -165,6 +248,137 @@ export async function clientHandlerRoutes(app: FastifyInstance, options: { datab
         return { ok: true, client };
       } catch (err) {
         return reply.code(500).send({ ok: false, error: err instanceof Error ? err.message : 'Failed to close deal.' });
+      }
+    });
+
+    // Get client handler settings (notification phone and preferences)
+    authedApp.get('/api/client-handler/settings', async () => {
+      const phone = options.database.getSetting('deal_notification_phone') || '';
+      const enabled = options.database.getSetting('deal_notifications_enabled') !== 'false';
+      const whatsappStatus = BaileysManager.getInstance(options.database).getStatus();
+      return {
+        ok: true,
+        settings: {
+          dealNotificationPhone: phone,
+          dealNotificationsEnabled: enabled,
+        },
+        whatsappReady: whatsappStatus.isReady,
+        whatsappState: whatsappStatus.state,
+      };
+    });
+
+    // Save client handler settings
+    authedApp.post('/api/client-handler/settings', async (request, reply) => {
+      const parsed = z.object({
+        dealNotificationPhone: z.string().trim().max(40),
+        dealNotificationsEnabled: z.boolean().optional(),
+      }).safeParse(request.body);
+
+      if (!parsed.success) {
+        return reply.code(400).send({ ok: false, error: 'Invalid settings payload.' });
+      }
+
+      const rawPhone = parsed.data.dealNotificationPhone;
+      let formattedPhone = '';
+      if (rawPhone) {
+        const cleanDigits = normalizeToInternationalWhatsApp(rawPhone);
+        if (cleanDigits.length < 8 || cleanDigits.length > 15) {
+          return reply.code(400).send({
+            ok: false,
+            error: `Invalid WhatsApp number (+${cleanDigits}). Expected 8-15 digits with country code (e.g. +923001234567).`,
+          });
+        }
+        formattedPhone = `+${cleanDigits}`;
+      }
+
+      options.database.setSetting('deal_notification_phone', formattedPhone);
+      if (parsed.data.dealNotificationsEnabled !== undefined) {
+        options.database.setSetting('deal_notifications_enabled', parsed.data.dealNotificationsEnabled ? 'true' : 'false');
+      }
+
+      return {
+        ok: true,
+        message: formattedPhone
+          ? `Notification preferences saved. Finalized deal alerts will be dispatched to ${formattedPhone}.`
+          : 'Notification preferences saved.',
+        settings: {
+          dealNotificationPhone: formattedPhone,
+          dealNotificationsEnabled: parsed.data.dealNotificationsEnabled !== false,
+        },
+      };
+    });
+
+    // Send test deal notification
+    authedApp.post('/api/client-handler/test-notification', async (request, reply) => {
+      const parsed = z.object({
+        phone: z.string().trim().max(40).optional(),
+      }).safeParse(request.body);
+
+      if (!parsed.success) {
+        return reply.code(400).send({ ok: false, error: 'Invalid phone number format.' });
+      }
+
+      const inputPhone = parsed.data.phone || options.database.getSetting('deal_notification_phone') || '';
+      if (!inputPhone) {
+        return reply.code(400).send({
+          ok: false,
+          error: 'Please enter a WhatsApp phone number with country code (e.g. +923001234567).',
+        });
+      }
+
+      const cleanDigits = normalizeToInternationalWhatsApp(inputPhone);
+      if (cleanDigits.length < 8 || cleanDigits.length > 15) {
+        return reply.code(400).send({
+          ok: false,
+          error: `Invalid WhatsApp number (+${cleanDigits}). Expected 8-15 digits with country code (e.g. +923001234567).`,
+        });
+      }
+
+      const formattedPhone = `+${cleanDigits}`;
+      const baileysMgr = BaileysManager.getInstance(options.database);
+      const status = baileysMgr.getStatus();
+
+      if (!status.isReady) {
+        return reply.code(400).send({
+          ok: false,
+          error: 'Unable to send the test message. WhatsApp is disconnected. Please open the WhatsApp connection page and scan the QR code first.',
+          connectionStatus: status.state,
+        });
+      }
+
+      try {
+        const testText =
+          `🧪 *TEST NOTIFICATION — Client Handler Deal Alert*\n\n` +
+          `✅ *Your WhatsApp notification system is active and verified!*\n\n` +
+          `Whenever an autonomous deal is finalized or won with a client, you will receive an executive summary here:\n` +
+          `• Client Name & Contact Info\n` +
+          `• Agreed Services & Deliverables\n` +
+          `• Closed Price & Project Timeline\n` +
+          `• Complete Conversation Context\n\n` +
+          `📅 Verified At: ${new Date().toLocaleString()}\n` +
+          `📱 Destination: ${formattedPhone}`;
+
+        const sent = await baileysMgr.sendTextMessage(formattedPhone, testText);
+
+        return {
+          ok: true,
+          message: `Test WhatsApp message sent successfully to ${formattedPhone}.`,
+          sent: {
+            providerMessageId: sent.providerMessageId,
+            status: sent.status,
+            phone: formattedPhone,
+            timestamp: new Date().toISOString(),
+          },
+        };
+      } catch (err) {
+        const rawErr = err instanceof Error ? err.message : 'Failed to send test notification.';
+        const notRegistered = rawErr.toLowerCase().includes('not registered');
+        return reply.code(400).send({
+          ok: false,
+          error: notRegistered
+            ? `Unable to send test message: Number ${formattedPhone} is not registered on WhatsApp. Please check your country code and phone number.`
+            : `Unable to send test message: ${rawErr}`,
+        });
       }
     });
   });

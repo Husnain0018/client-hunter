@@ -74,14 +74,29 @@ export const WhatsAppPage: React.FC<WhatsAppPageProps> = ({ onNavigateToClientHa
     };
   }, []);
 
-  const handleConnect = async () => {
+  const handleConnect = async (forceNewQr?: boolean) => {
     setLoadingAction('connect');
     setErrorMessage(null);
     setSuccessMessage(null);
     try {
-      const res = await api.connectWhatsApp();
-      if (res?.status) setStatusInfo(res.status);
-      setSuccessMessage('WhatsApp connection initialized. Waiting for QR scan...');
+      const shouldForce =
+        forceNewQr ??
+        (statusInfo.state === 'session_expired' ||
+          statusInfo.state === 'logged_out' ||
+          statusInfo.state === 'connection_failed' ||
+          statusInfo.state === 'connection_error' ||
+          !statusInfo.hasSavedSession);
+      const res = await api.connectWhatsApp({ forceNewQr: shouldForce });
+      if (res?.status) {
+        setStatusInfo(res.status);
+        if (res.status.state === 'connected') {
+          setSuccessMessage('WhatsApp connected successfully!');
+        } else if (res.status.qr) {
+          setSuccessMessage('QR code generated! Scan it with WhatsApp on your mobile phone.');
+        } else {
+          setSuccessMessage('WhatsApp connection initialized. Waiting for QR code...');
+        }
+      }
     } catch (err) {
       setErrorMessage(err instanceof Error ? err.message : 'Could not initialize WhatsApp connection.');
     } finally {
@@ -122,14 +137,22 @@ export const WhatsAppPage: React.FC<WhatsAppPageProps> = ({ onNavigateToClientHa
     }
   };
 
-  const handleRestart = async () => {
+  const handleRestart = async (forceNewQr?: boolean) => {
     setLoadingAction('restart');
     setErrorMessage(null);
     setSuccessMessage(null);
     try {
-      const res = await api.restartWhatsApp();
-      if (res?.status) setStatusInfo(res.status);
-      setSuccessMessage('Reconnection requested.');
+      const res = await api.restartWhatsApp({ forceNewQr });
+      if (res?.status) {
+        setStatusInfo(res.status);
+        if (res.status.state === 'connected') {
+          setSuccessMessage('WhatsApp reconnected successfully!');
+        } else if (res.status.qr) {
+          setSuccessMessage('Fresh pairing QR code generated! Scan it with WhatsApp on your phone.');
+        } else {
+          setSuccessMessage('Reconnection initialized.');
+        }
+      }
     } catch (err) {
       setErrorMessage(err instanceof Error ? err.message : 'Could not reconnect WhatsApp.');
     } finally {
@@ -189,18 +212,33 @@ export const WhatsAppPage: React.FC<WhatsAppPageProps> = ({ onNavigateToClientHa
             Reconnecting ({statusInfo.reconnectAttempts})…
           </span>
         );
-      case 'logged_out':
+      case 'temporarily_disconnected':
+        return (
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: '#fff7ed', color: '#ea580c', padding: '4px 12px', borderRadius: 999, fontWeight: 700, fontSize: '13px' }}>
+            <WifiOff size={14} />
+            Temporarily Disconnected
+          </span>
+        );
+      case 'session_expired':
         return (
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: '#fee2e2', color: '#b91c1c', padding: '4px 12px', borderRadius: 999, fontWeight: 700, fontSize: '13px' }}>
+            <AlertCircle size={14} />
+            Session Expired
+          </span>
+        );
+      case 'logged_out':
+        return (
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: '#f1f5f9', color: '#475569', padding: '4px 12px', borderRadius: 999, fontWeight: 700, fontSize: '13px' }}>
             <LogOut size={14} />
             Logged Out
           </span>
         );
       case 'connection_error':
+      case 'connection_failed':
         return (
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: '#fee2e2', color: '#b91c1c', padding: '4px 12px', borderRadius: 999, fontWeight: 700, fontSize: '13px' }}>
             <AlertCircle size={14} />
-            Connection Error
+            Connection Failed
           </span>
         );
       case 'disconnected':
@@ -209,14 +247,14 @@ export const WhatsAppPage: React.FC<WhatsAppPageProps> = ({ onNavigateToClientHa
         return (
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: '#f1f5f9', color: '#475569', padding: '4px 12px', borderRadius: 999, fontWeight: 700, fontSize: '13px' }}>
             <WifiOff size={14} />
-            Not Connected
+            {statusInfo.hasSavedSession ? 'Saved Session Offline' : 'Not Connected'}
           </span>
         );
     }
   };
 
   return (
-    <div style={{ maxWidth: 1100, margin: '0 auto', padding: '32px 20px', fontFamily: 'inherit' }}>
+    <div className="whatsapp-page" style={{ maxWidth: 1100, margin: '0 auto', padding: '32px 20px', fontFamily: 'inherit' }}>
       {/* Header Banner */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 28, flexWrap: 'wrap', gap: 16 }}>
         <div>
@@ -374,7 +412,7 @@ export const WhatsAppPage: React.FC<WhatsAppPageProps> = ({ onNavigateToClientHa
                 </button>
               )}
             </div>
-          ) : statusInfo.state === 'waiting_for_qr' && statusInfo.qr ? (
+          ) : statusInfo.qr ? (
             <div style={{ textAlign: 'center' }}>
               <div style={{ marginBottom: 16 }}>
                 <span style={{ fontSize: '13px', fontWeight: 700, color: '#0369a1', background: '#e0f2fe', padding: '4px 10px', borderRadius: 999 }}>
@@ -397,19 +435,32 @@ export const WhatsAppPage: React.FC<WhatsAppPageProps> = ({ onNavigateToClientHa
                   value={statusInfo.qr}
                   size={240}
                   level="M"
-                  includeMargin={false}
+                  includeMargin={true}
                 />
               </div>
 
-              <p style={{ fontSize: '12px', color: '#64748b', margin: 0 }}>
+              <p style={{ fontSize: '12px', color: '#64748b', margin: '0 0 12px' }}>
                 This QR code auto-refreshes automatically. Point your phone camera directly at the code.
               </p>
+
+              <button
+                type="button"
+                className="button ghost"
+                disabled={Boolean(loadingAction)}
+                onClick={() => void handleRestart(true)}
+                style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: '12px' }}
+              >
+                <RefreshCw size={13} className={loadingAction === 'restart' ? 'spin' : ''} />
+                Generate Fresh QR Code
+              </button>
             </div>
           ) : (
             <div style={{ textAlign: 'center', padding: '40px 16px' }}>
               <div style={{ width: 64, height: 64, borderRadius: '50%', background: '#f1f5f9', color: '#64748b', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
-                {statusInfo.state === 'initializing' || statusInfo.state === 'connecting' ? (
+                {statusInfo.state === 'initializing' || statusInfo.state === 'connecting' || statusInfo.state === 'reconnecting' ? (
                   <Loader2 size={32} className="spin" color="#0284c7" />
+                ) : statusInfo.hasSavedSession ? (
+                  <Smartphone size={32} color="#16a34a" />
                 ) : (
                   <QrCode size={32} />
                 )}
@@ -421,35 +472,81 @@ export const WhatsAppPage: React.FC<WhatsAppPageProps> = ({ onNavigateToClientHa
                   : statusInfo.state === 'connecting'
                   ? 'Connecting to WhatsApp…'
                   : statusInfo.state === 'reconnecting'
-                  ? 'Reconnecting Session…'
+                  ? `Reconnecting to WhatsApp (Attempt ${statusInfo.reconnectAttempts})…`
+                  : statusInfo.state === 'temporarily_disconnected'
+                  ? 'Temporarily Disconnected'
+                  : statusInfo.state === 'session_expired'
+                  ? 'Session Expired'
+                  : statusInfo.hasSavedSession
+                  ? 'Saved Session Offline'
                   : 'WhatsApp Disconnected'}
               </h3>
 
-              <p style={{ fontSize: '13px', color: '#64748b', maxWidth: 360, margin: '0 auto 24px', lineHeight: 1.5 }}>
-                {statusInfo.state === 'logged_out'
-                  ? 'Your WhatsApp session expired or was logged out from the phone. Click below to generate a new QR code.'
+              <p style={{ fontSize: '13px', color: '#64748b', maxWidth: 380, margin: '0 auto 24px', lineHeight: 1.5 }}>
+                {statusInfo.state === 'session_expired' || statusInfo.state === 'logged_out'
+                  ? 'Your WhatsApp session expired or was unlinked on your mobile phone. Click below to generate a new pairing QR code.'
+                  : statusInfo.state === 'reconnecting' || statusInfo.state === 'connecting'
+                  ? 'The backend is actively restoring your WhatsApp connection using saved authentication keys. Please wait a moment.'
+                  : statusInfo.hasSavedSession
+                  ? 'Your WhatsApp account is saved securely on the server. Click Reconnect below to restore the connection without scanning another QR code.'
                   : 'Click the button below to initialize Baileys and generate a real-time pairing QR code.'}
               </p>
 
-              <button
-                type="button"
-                className="button primary"
-                disabled={Boolean(loadingAction)}
-                onClick={() => void handleConnect()}
-                style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '10px 24px', fontSize: '14px' }}
-              >
-                {loadingAction === 'connect' ? (
+              <div style={{ display: 'flex', gap: 10, justifyContent: 'center', flexWrap: 'wrap' }}>
+                {statusInfo.hasSavedSession && statusInfo.state !== 'session_expired' && statusInfo.state !== 'logged_out' ? (
                   <>
-                    <Loader2 size={16} className="spin" />
-                    Generating QR…
+                    <button
+                      type="button"
+                      className="button primary"
+                      disabled={Boolean(loadingAction) || statusInfo.state === 'connecting' || statusInfo.state === 'reconnecting'}
+                      onClick={() => void handleConnect()}
+                      style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '10px 24px', fontSize: '14px' }}
+                    >
+                      {loadingAction === 'connect' || statusInfo.state === 'connecting' || statusInfo.state === 'reconnecting' ? (
+                        <>
+                          <Loader2 size={16} className="spin" />
+                          Reconnecting…
+                        </>
+                      ) : (
+                        <>
+                          <RefreshCw size={16} />
+                          Reconnect Saved Session
+                        </>
+                      )}
+                    </button>
+                    <button
+                      type="button"
+                      className="button ghost"
+                      disabled={Boolean(loadingAction)}
+                      onClick={() => void handleLogout()}
+                      style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: '13px', color: '#dc2626' }}
+                    >
+                      <LogOut size={14} />
+                      Unlink & Re-scan
+                    </button>
                   </>
                 ) : (
-                  <>
-                    <QrCode size={16} />
-                    Connect WhatsApp
-                  </>
+                  <button
+                    type="button"
+                    className="button primary"
+                    disabled={Boolean(loadingAction)}
+                    onClick={() => void handleConnect()}
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '10px 24px', fontSize: '14px' }}
+                  >
+                    {loadingAction === 'connect' ? (
+                      <>
+                        <Loader2 size={16} className="spin" />
+                        Generating QR…
+                      </>
+                    ) : (
+                      <>
+                        <QrCode size={16} />
+                        Connect WhatsApp
+                      </>
+                    )}
+                  </button>
                 )}
-              </button>
+              </div>
             </div>
           )}
         </div>

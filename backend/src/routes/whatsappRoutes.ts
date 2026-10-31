@@ -18,6 +18,11 @@ export async function whatsappRoutes(app: FastifyInstance, options: { database: 
 
     // 1. Connection status
     authedApp.get('/api/whatsapp/status', async () => {
+      const status = baileys.getStatus();
+      if ((status.state === 'not_connected' || status.state === 'disconnected') && status.hasSavedSession) {
+        // Auto-reconnect in background if saved session exists
+        void baileys.connect().catch(() => {});
+      }
       return { ok: true, status: baileys.getStatus() };
     });
 
@@ -28,6 +33,7 @@ export async function whatsappRoutes(app: FastifyInstance, options: { database: 
         'Cache-Control': 'no-cache, no-transform',
         'Connection': 'keep-alive',
         'X-Accel-Buffering': 'no',
+        'Access-Control-Allow-Origin': request.headers.origin || '*',
       });
 
       // Send initial state immediately
@@ -64,9 +70,14 @@ export async function whatsappRoutes(app: FastifyInstance, options: { database: 
     });
 
     // 3. Connect (initialize session or generate QR)
-    authedApp.post('/api/whatsapp/connect', async (_request, reply) => {
+    authedApp.post('/api/whatsapp/connect', async (request, reply) => {
       try {
-        const status = await baileys.connect();
+        const body = (request.body as { forceNewQr?: boolean } | null) || {};
+        await baileys.connect({
+          forceNewQr: Boolean(body.forceNewQr),
+          userInitiated: true,
+        });
+        const status = await baileys.waitForQrOrConnection(5500);
         return { ok: true, status };
       } catch (err) {
         return reply.code(500).send({
@@ -90,9 +101,14 @@ export async function whatsappRoutes(app: FastifyInstance, options: { database: 
     });
 
     // 6. Restart/reconnect
-    authedApp.post('/api/whatsapp/restart', async (_request, reply) => {
+    authedApp.post('/api/whatsapp/restart', async (request, reply) => {
       try {
-        const status = await baileys.restart();
+        const body = (request.body as { forceNewQr?: boolean } | null) || {};
+        await baileys.restart({
+          forceNewQr: Boolean(body.forceNewQr),
+          userInitiated: true,
+        });
+        const status = await baileys.waitForQrOrConnection(5500);
         return { ok: true, status };
       } catch (err) {
         return reply.code(500).send({
@@ -101,6 +117,15 @@ export async function whatsappRoutes(app: FastifyInstance, options: { database: 
           status: baileys.getStatus(),
         });
       }
+    });
+
+    // 6b. Connection diagnostics
+    authedApp.get('/api/whatsapp/diagnostics', async () => {
+      return {
+        ok: true,
+        status: baileys.getStatus(),
+        diagnostics: baileys.getDiagnostics(),
+      };
     });
 
     // 7. Direct authenticated message send

@@ -13,13 +13,23 @@ export type BaileysConnectionState =
   | 'connected'
   | 'reconnecting'
   | 'disconnected'
+  | 'temporarily_disconnected'
+  | 'session_expired'
   | 'logged_out'
-  | 'connection_error';
+  | 'connection_error'
+  | 'connection_failed';
 
 export interface BaileysAccountInfo {
   id: string;
   name?: string;
   phone?: string;
+}
+
+export interface BaileysDiagnosticEntry {
+  timestamp: string;
+  event: string;
+  state: BaileysConnectionState;
+  detail?: string;
 }
 
 export interface BaileysStatusInfo {
@@ -30,6 +40,8 @@ export interface BaileysStatusInfo {
   reconnectAttempts: number;
   lastConnectedAt?: string | null;
   isReady: boolean;
+  hasSavedSession?: boolean;
+  diagnostics?: BaileysDiagnosticEntry[];
 }
 
 export interface ProblemFinding {
@@ -241,6 +253,17 @@ export interface ConversationMessage {
   metadata?: Record<string, unknown>;
 }
 
+export interface ProjectPlanDetails {
+  services: string[];
+  tasks: string[];
+  deliverables: string;
+  duration: string;
+  startDate?: string;
+  deadline?: string;
+  estimatedCharges: string;
+  notes?: string;
+}
+
 export interface ClientConversation {
   leadId: string;
   businessName: string;
@@ -259,6 +282,15 @@ export interface ClientConversation {
   followUpCount: number;
   optedOut: boolean;
   summary: string;
+  identifiedRequirements?: string[];
+  projectPlan?: ProjectPlanDetails;
+  aiHandled?: boolean;
+  lastAiAction?: string;
+  nextRecommendedAction?: string;
+  dealNotificationPhone?: string;
+  dealNotificationStatus?: 'sent' | 'pending' | 'failed' | '';
+  dealNotificationText?: string;
+  dealNotificationError?: string;
   lastMessageAt: string;
   createdAt: string;
   updatedAt: string;
@@ -269,12 +301,18 @@ export interface ClientConversation {
 export interface ClientHandlerStats {
   totalClients: number;
   newLeads: number;
+  contacted: number;
   awaitingReply: number;
   activeConversations: number;
   negotiating: number;
   closedWon: number;
   needsHuman: number;
   optedOut: number;
+  totalIncomingMessages: number;
+  totalOutgoingMessages: number;
+  aiHandledCount: number;
+  requirementsIdentifiedCount: number;
+  projectSummariesCount: number;
 }
 
 export interface DealClosingInfo {
@@ -288,3 +326,378 @@ export interface DealClosingInfo {
   notifyUserWhatsApp?: boolean;
   userPhoneNumber?: string;
 }
+
+// ==========================================
+// AI Job Finder & Career Assistant Types
+// ==========================================
+
+export type WorkplaceType = 'Remote' | 'Hybrid' | 'On-site';
+export type EmploymentType = 'Full-time' | 'Part-time' | 'Contract' | 'Internship' | 'Freelance';
+export type ExperienceLevel = 'Entry-level' | 'Mid-level' | 'Senior' | 'Lead' | 'Executive';
+
+export type SocialPlatform =
+  | 'LinkedIn'
+  | 'GitHub'
+  | 'GitLab'
+  | 'Portfolio'
+  | 'Website'
+  | 'X (Twitter)'
+  | 'Instagram'
+  | 'Behance'
+  | 'Dribbble'
+  | 'Other';
+
+export interface SocialAccount {
+  id: string;
+  platform: SocialPlatform;
+  customPlatform?: string;
+  url: string;
+}
+
+export interface JobListing {
+  id: string;
+  externalId: string;
+  source: string;
+  title: string;
+  company: string;
+  location: string;
+  country: string;
+  workplaceType: WorkplaceType;
+  employmentType: EmploymentType;
+  experienceLevel: ExperienceLevel;
+  salaryMin?: number | null;
+  salaryMax?: number | null;
+  salaryCurrency?: string;
+  salaryRaw?: string;
+  description: string;
+  shortDescription?: string;
+  department?: string;
+  responsibilities?: string[];
+  qualifications?: string[];
+  professionalSkills?: string[];
+  educationRequirements?: string;
+  experienceRequirements?: string;
+  freshGraduatesEligible?: boolean | null;
+  benefits?: string[];
+  applicationInstructions?: string;
+  contactEmail?: string;
+  lastVerifiedAt?: string;
+  skills: string[];
+  requirements: string[];
+  visaSponsorship?: boolean;
+  relocation?: boolean;
+  applyUrl: string;
+  sourceUrl: string;
+  postedAt: string;
+  deadline?: string | null;
+  isActive: boolean;
+  discoveredAt: string;
+  // Computed matching properties
+  matchScore?: number;
+  matchReasons?: string[];
+  missingSkills?: string[];
+  isSaved?: boolean;
+  applicationStatus?: JobApplicationStatus;
+}
+
+export interface InternshipRecord {
+  id?: string;
+  organization: string;
+  role: string;
+  duration: string;
+  description: string;
+  skillsGained?: string[];
+  certificateUrl?: string;
+}
+
+export interface EducationRecord {
+  id?: string;
+  institution: string;
+  degree: string;
+  field: string;
+  year: string;
+  gpa?: string;
+  description?: string;
+}
+
+export interface ExperienceRecord {
+  id?: string;
+  title: string;
+  company: string;
+  location?: string;
+  startDate: string;
+  endDate?: string;
+  current?: boolean;
+  description: string;
+  responsibilities?: string[];
+  achievements?: string[];
+  technologies?: string[];
+}
+
+export interface ProjectRecord {
+  id?: string;
+  name: string;
+  role?: string;
+  description: string;
+  technologies: string[];
+  link?: string;
+  repoUrl?: string;
+}
+
+export interface CertificationRecord {
+  id?: string;
+  name: string;
+  issuer?: string;
+  date?: string;
+  url?: string;
+}
+
+export interface LanguageRecord {
+  language: string;
+  proficiency: 'Native' | 'Fluent' | 'Professional' | 'Intermediate' | 'Basic';
+}
+
+export interface CareerProfile {
+  id: string;
+  userId: string;
+  fullName: string;
+  email: string;
+  phone: string;
+  location: string;
+  photoUrl?: string;
+  includePhotoInResume?: boolean;
+  preferredLocations: string[];
+  summary: string;
+  skills: string[];
+  professionalSkills?: string[];
+  experience: ExperienceRecord[];
+  internships?: InternshipRecord[];
+  education: EducationRecord[];
+  certifications: Array<CertificationRecord | string>;
+  projects: ProjectRecord[];
+  portfolioLinks: string[];
+  socialAccounts?: SocialAccount[];
+  languages: Array<LanguageRecord | string>;
+  targetRoles: string[];
+  employmentTypes: EmploymentType[];
+  remotePreference: WorkplaceType;
+  minSalary?: string;
+  visaStatus: string;
+  updatedAt: string;
+}
+
+export interface StoredResume {
+  id: string;
+  filename: string;
+  filePath: string;
+  mimeType: string;
+  fileSize: number;
+  parsedText: string;
+  createdAt: string;
+}
+
+export interface ResumeAnalysis {
+  id: string;
+  resumeId: string;
+  overallScore: number;
+  summaryCritique: string;
+  skillsFeedback: string;
+  experienceFeedback: string;
+  formattingFeedback: string;
+  recommendations: Array<{
+    category: 'Contact' | 'Summary' | 'Experience' | 'Skills' | 'Achievements' | 'ATS & Keywords';
+    issue: string;
+    recommendedImprovement: string;
+    priority: 'high' | 'medium' | 'low';
+  }>;
+  keywordsDetected: string[];
+  missingKeywords: string[];
+  internationalNotes: string[];
+  createdAt: string;
+}
+
+export interface GeneratedResume {
+  id: string;
+  resumeId?: string;
+  title: string;
+  targetRole: string;
+  templateType: 'software_engineering' | 'international' | 'remote_work' | 'general_professional' | 'entry_level';
+  contentText: string;
+  contentHtml: string;
+  createdAt: string;
+}
+
+export type JobApplicationStatus =
+  | 'draft'
+  | 'ready_to_send'
+  | 'ready_to_apply'
+  | 'sent'
+  | 'submitted'
+  | 'delivery_confirmed'
+  | 'awaiting_response'
+  | 'awaiting_approval'
+  | 'under_review'
+  | 'replied'
+  | 'interview_invited'
+  | 'interview_scheduled'
+  | 'interview'
+  | 'rejected'
+  | 'shortlisted'
+  | 'offer_received'
+  | 'offer'
+  | 'accepted'
+  | 'withdrawn'
+  | 'failed'
+  | 'requires_manual_completion';
+
+export interface ApplicationActivityEvent {
+  id: string;
+  date: string;
+  time: string;
+  activity: string;
+  details?: string;
+  icon?: string;
+}
+
+export interface EmployerResponseRecord {
+  id: string;
+  fromEmail: string;
+  subject: string;
+  body: string;
+  receivedAt: string;
+  category: 'general' | 'info_request' | 'portfolio_request' | 'interview_invite' | 'technical_questions' | 'salary_inquiry' | 'availability_inquiry' | 'rejection' | 'document_request';
+  suggestedReply?: string;
+  userReply?: string;
+  repliedAt?: string;
+}
+
+export interface JobApplicationEmailRecord {
+  id: string;
+  applicationId?: string;
+  jobId: string;
+  companyName: string;
+  jobTitle: string;
+  recipientEmail: string;
+  senderEmail: string;
+  subject: string;
+  body: string;
+  resumeId?: string;
+  resumeName?: string;
+  sentAt: string;
+  deliveryStatus: 'sent' | 'delivery_confirmed' | 'failed';
+  failureReason?: string;
+  createdAt: string;
+}
+
+export interface JobApplication {
+  id: string;
+  jobId: string;
+  job?: JobListing;
+  status: JobApplicationStatus;
+  applicationMode: 'manual' | 'automatic' | 'email';
+  resumeId?: string;
+  coverLetter: string;
+  answers: Record<string, string>;
+  submissionRef?: string;
+  failureReason?: string;
+  notes?: string;
+  recipientEmail?: string;
+  senderEmail?: string;
+  emailSubject?: string;
+  emailBody?: string;
+  sentAt?: string;
+  deliveryStatus?: string;
+  employerResponses?: EmployerResponseRecord[];
+  activityTimeline?: ApplicationActivityEvent[];
+  appliedAt: string;
+  updatedAt: string;
+}
+
+export interface JobSyncStatusInfo {
+  isSyncing: boolean;
+  lastSyncAt: string | null;
+  nextSyncAt: string | null;
+  autoSyncEnabled: boolean;
+  intervalHours: number;
+  sourcesChecked: string[];
+  sourcesFailed: string[];
+  lastDiscoveredCount: number;
+  lastDuplicatesSkipped: number;
+  lastError: string | null;
+}
+
+export interface JobNotification {
+  id: string;
+  type: 'new_match' | 'deadline' | 'application_submitted' | 'action_required' | 'interview';
+  title: string;
+  message: string;
+  jobId?: string;
+  isRead: boolean;
+  createdAt: string;
+}
+
+export interface JobDiscoveryConfig {
+  id: string;
+  autoApplyEnabled: boolean;
+  maxDailyApplications: number;
+  minCompatibilityScore: number;
+  preferredCountries: string[];
+  preferredRoles: string[];
+  excludedCompanies: string[];
+  enabledPlatforms: string[];
+  autoDiscoveryIntervalHours: number;
+  lastRunAt?: string | null;
+  updatedAt: string;
+}
+
+export interface JobSearchParams {
+  query?: string;
+  country?: string;
+  location?: string;
+  role?: string;
+  workplaceType?: WorkplaceType | 'all';
+  employmentType?: EmploymentType | 'all';
+  experienceLevel?: ExperienceLevel | 'all';
+  minSalary?: number;
+  maxSalary?: number;
+  source?: string;
+  sources?: string[];
+  minScore?: number;
+  postedWithinDays?: number;
+  dateFilter?: 'all' | 'today' | 'yesterday' | 'last7' | 'last30' | 'custom';
+  customStartDate?: string;
+  customEndDate?: string;
+  savedOnly?: boolean;
+  appliedOnly?: boolean;
+  page?: number;
+  limit?: number;
+  offset?: number;
+}
+
+export interface JobSyncLogRecord {
+  id: string;
+  startedAt: string;
+  completedAt: string;
+  triggerType: 'manual' | 'scheduled' | 'startup';
+  status: 'success' | 'running' | 'failed';
+  sourcesChecked: string[];
+  sourcesFailed: string[];
+  totalFetched: number;
+  newSaved: number;
+  duplicatesSkipped: number;
+  errorMessage?: string;
+}
+
+export interface JobDiscoveryStats {
+  totalDiscoveredToday: number;
+  totalDiscoveredYesterday: number;
+  totalDiscoveredThisWeek: number;
+  totalDuplicatesSkipped: number;
+  totalMatchingJobs: number;
+  lastSyncAt: string | null;
+  nextSyncAt: string | null;
+  autoSyncEnabled: boolean;
+  intervalHours: number;
+  enabledPlatforms: string[];
+}
+

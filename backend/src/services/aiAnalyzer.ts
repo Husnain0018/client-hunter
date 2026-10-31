@@ -34,6 +34,7 @@ export interface SenderIdentity {
   companyName: string;
   displayName: string;
   whatsappIntro: string;
+  directIntro: string;
   emailOpening: string;
   icebreaker: string;
   whatsappGreeting: (businessName: string) => string;
@@ -96,6 +97,7 @@ export function resolveSenderIdentity(
   }
 
   let whatsappIntro = '';
+  let directIntro = '';
   let emailOpening = '';
   let icebreaker = '';
   let displayName = '';
@@ -104,17 +106,20 @@ export function resolveSenderIdentity(
     const comp = c || u;
     displayName = comp;
     whatsappIntro = `I'm reaching out from ${comp}`;
+    directIntro = `Hi, I'm reaching out from ${comp}.`;
     emailOpening = `I'm reaching out from ${comp}`;
     icebreaker = `Hi {title} team, I'm reaching out from ${comp}. I recently reviewed your Google Maps profile in {area}`;
   } else if (type === 'person_with_company' && u && c) {
     displayName = `${u} (${c})`;
     whatsappIntro = `my name is ${u} from ${c}`;
+    directIntro = `Hi, my name is ${u} from ${c}.`;
     emailOpening = `my name is ${u} from ${c}`;
     icebreaker = `Hi {title} team, my name is ${u} from ${c}. I recently reviewed your Google Maps profile in {area}`;
   } else {
     // Person only
     displayName = u;
     whatsappIntro = `my name is ${u}`;
+    directIntro = u ? `Hi, my name is ${u}.` : `Hi, I'm reaching out to you.`;
     emailOpening = `my name is ${u}`;
     icebreaker = `Hi {title} team, my name is ${u}. I recently reviewed your Google Maps profile in {area}`;
   }
@@ -133,6 +138,7 @@ export function resolveSenderIdentity(
     companyName: resolvedCompany,
     displayName,
     whatsappIntro,
+    directIntro,
     emailOpening,
     icebreaker,
     whatsappGreeting: greetingFn,
@@ -157,15 +163,295 @@ export function cleanSenderIntro(message: string, identity: SenderIdentity): str
     // Pattern: "this is X from X" or "I'm X from X"
     const doubleCompPattern = new RegExp(`(?:this is|I'?m|I am)\\s+${escComp}\\s+from\\s+${escComp}`, 'gi');
     cleaned = cleaned.replace(doubleCompPattern, `I'm reaching out from ${comp}`);
+
+    // Pattern: duplicate "Hi, I'm reaching out from X. Hi, I'm reaching out from X"
+    const dupDirectPattern = new RegExp(`(Hi,?\\s+I'?m\\s+reaching\\s+out\\s+from\\s+${escComp}\\.?)\\s*(?:Hi,?\\s*)?(?:I'?m\\s+reaching\\s+out\\s+from|this\\s+is)\\s+${escComp}\\.?`, 'gi');
+    cleaned = cleaned.replace(dupDirectPattern, `$1`);
   }
 
   if (name && identity.type === 'person') {
     const escName = name.replace(/[.*+?^${}()|[\]\\s]+/g, '\\s*');
     const doubleNamePattern = new RegExp(`(?:this is|I'?m|I am)\\s+${escName}\\s+from\\s+${escName}`, 'gi');
     cleaned = cleaned.replace(doubleNamePattern, `my name is ${name}`);
+
+    // Pattern: duplicate "Hi, my name is X. Hi, my name is X"
+    const dupNamePattern = new RegExp(`(Hi,?\\s+my\\s+name\\s+is\\s+${escName}\\.?)\\s*(?:Hi,?\\s*)?my\\s+name\\s+is\\s+${escName}\\.?`, 'gi');
+    cleaned = cleaned.replace(dupNamePattern, `$1`);
   }
 
   return cleaned;
+}
+
+export interface BuildWhatsAppOutreachOptions {
+  leadId?: string;
+  businessName: string;
+  category?: string;
+  niche?: string;
+  address?: string;
+  audit?: Partial<WebsiteAudit>;
+  socialActivity?: Record<string, SocialActivity>;
+  competitors?: Competitor[];
+  problems?: ProblemFinding[];
+  weaknesses?: string[];
+  identity: SenderIdentity;
+  availableServices?: string[];
+  strategy?: OutreachStrategy;
+}
+
+function buildImpactSentence(selectedCategories: string[], audienceNoun: string, businessNoun: string): string {
+  const hasBooking = selectedCategories.includes('booking');
+  const hasWebsite = selectedCategories.includes('website');
+  const hasResponse = selectedCategories.includes('response');
+  const hasSocial = selectedCategories.includes('social');
+  const hasReputation = selectedCategories.includes('reputation');
+
+  if (hasBooking && (hasWebsite || hasSocial)) {
+    return `These issues may make it harder for potential ${audienceNoun} to find information about your services and book appointments easily.`;
+  }
+  if (hasResponse || hasBooking) {
+    return `These issues may make it harder for potential ${audienceNoun} to reach you promptly, learn about your services, or choose your ${businessNoun} over competitors.`;
+  }
+  if (hasSocial || hasReputation) {
+    return `These issues may reduce your online visibility and make it harder for prospective ${audienceNoun} to discover your services and choose your ${businessNoun} over nearby competitors.`;
+  }
+  return `These issues may make it harder for potential ${audienceNoun} to reach you, learn about your services, or choose your ${businessNoun} over competitors.`;
+}
+
+function buildServicesClause(selectedCategories: string[], availableServices: string[], businessNoun: string): string {
+  const capabilities: string[] = [];
+
+  const hasWebsiteProblem = selectedCategories.includes('website');
+  const hasResponseOrBooking = selectedCategories.includes('response') || selectedCategories.includes('booking');
+  const hasSocialProblem = selectedCategories.includes('social');
+  const hasSearchProblem = selectedCategories.includes('reputation') || selectedCategories.includes('information');
+
+  const hasWebDevService = availableServices.some((s) => /web|site|design|develop|landing|wordpress/i.test(s));
+  const hasAutomationService = availableServices.some((s) => /whatsapp|bot|chatbot|automation|crm|book/i.test(s));
+  const hasSocialService = availableServices.some((s) => /social|ugc|video|content|instagram|facebook/i.test(s));
+  const hasSeoService = availableServices.some((s) => /seo|search|rank|google|ads|ppc/i.test(s));
+
+  if ((hasWebsiteProblem || capabilities.length === 0) && hasWebDevService) {
+    capabilities.push('improve their online presence');
+  }
+  if (hasResponseOrBooking && hasAutomationService) {
+    capabilities.push('streamline customer communication');
+  }
+  if (hasSocialProblem && hasSocialService && capabilities.length < 2) {
+    capabilities.push('strengthen their social media engagement');
+  }
+  if (hasSearchProblem && hasSeoService && capabilities.length < 2) {
+    capabilities.push('boost their local search visibility');
+  }
+
+  if (capabilities.length === 0) {
+    if (hasWebDevService) capabilities.push('improve their online presence');
+    if (hasAutomationService) capabilities.push('streamline customer communication');
+    if (hasSeoService) capabilities.push('boost local search visibility');
+  }
+  if (capabilities.length === 0) {
+    capabilities.push('improve their online presence and streamline customer communication');
+  }
+
+  const capabilityText = capabilities.slice(0, 2).join(' and ');
+  return `We help businesses ${capabilityText}. I'd be happy to share a few ideas that could help your ${businessNoun} address these challenges.`;
+}
+
+export function generatePersonalizedWhatsAppMessage(options: BuildWhatsAppOutreachOptions): string {
+  const {
+    businessName,
+    category,
+    niche,
+    audit,
+    socialActivity = {},
+    competitors = [],
+    problems: explicitProblems,
+    identity,
+    availableServices = [],
+    strategy,
+  } = options;
+
+  // 1. Natural & professional introduction using personal or company name
+  const intro = identity.directIntro || (
+    identity.type === 'company'
+      ? `Hi, I'm reaching out from ${identity.companyName || identity.displayName}.`
+      : identity.type === 'person_with_company'
+      ? `Hi, my name is ${identity.personName} from ${identity.companyName}.`
+      : `Hi, my name is ${identity.personName || 'Ali'}.`
+  );
+
+  // Business & audience nouns tailored to business category
+  const rawCat = (niche || category || 'business').toLowerCase();
+  let businessNoun = 'business';
+  let audienceNoun = 'customers';
+
+  if (/dental/i.test(rawCat)) {
+    businessNoun = 'dental clinic';
+    audienceNoun = 'patients';
+  } else if (/clinic|health|medical|physio|doctor|hospital/i.test(rawCat)) {
+    businessNoun = 'clinic';
+    audienceNoun = 'patients';
+  } else if (/restaurant|cafe|bakery|diner|bistro|food/i.test(rawCat)) {
+    businessNoun = 'restaurant';
+    audienceNoun = 'customers';
+  } else if (/salon|spa|barber|beauty|aesthetic/i.test(rawCat)) {
+    businessNoun = 'salon';
+    audienceNoun = 'clients';
+  } else if (/law|legal|attorney/i.test(rawCat)) {
+    businessNoun = 'law firm';
+    audienceNoun = 'clients';
+  } else if (/consult|agency|accountant|financial/i.test(rawCat)) {
+    businessNoun = 'firm';
+    audienceNoun = 'clients';
+  } else if (/gym|fitness|crossfit/i.test(rawCat)) {
+    businessNoun = 'fitness center';
+    audienceNoun = 'members';
+  } else if (category && category.toLowerCase() !== 'business' && category.length < 30) {
+    businessNoun = category.toLowerCase();
+  }
+
+  // 2. Opener referencing specific business and review of online presence
+  const bLower = (businessName || '').toLowerCase();
+  let researchOpener = '';
+  if (bLower.includes(businessNoun)) {
+    researchOpener = `I recently came across ${businessName} and took some time to review your online presence.`;
+  } else if (businessName) {
+    researchOpener = `I recently came across your ${businessNoun}, ${businessName}, and took some time to review your online presence.`;
+  } else {
+    researchOpener = `I recently came across your ${businessNoun} and took some time to review your online presence.`;
+  }
+
+  // Select 2 or 3 most relevant researched problems
+  interface ProblemCandidate {
+    id: string;
+    category: 'website' | 'response' | 'social' | 'booking' | 'information' | 'reputation';
+    phrase: string;
+    priority: number;
+  }
+
+  const candidates: ProblemCandidate[] = [];
+
+  // Social media review check
+  const inactiveSocial = Object.entries(socialActivity).find(([, item]) => item.status === 'Inactive' || item.status === 'Slow');
+  if (inactiveSocial || (strategy?.problems && strategy.problems.some((p) => p.category === 'social'))) {
+    candidates.push({
+      id: 'social',
+      category: 'social',
+      phrase: 'limited recent activity on your social media',
+      priority: 1,
+    });
+  }
+
+  // Online appointment booking check
+  const hasBookingProblem = (strategy?.problems && strategy.problems.some((p) => p.category === 'booking')) ||
+    (explicitProblems && explicitProblems.some((p) => p.category === 'booking')) ||
+    /dental|clinic|doctor|health|salon|spa|consult/i.test(rawCat);
+  if (hasBookingProblem) {
+    candidates.push({
+      id: 'booking',
+      category: 'booking',
+      phrase: 'a lack of convenient online appointment-booking options',
+      priority: 2,
+    });
+  }
+
+  // Website presence and health check
+  if (audit?.hasWebsite === false || audit?.status === 'No Website') {
+    candidates.push({
+      id: 'website_missing',
+      category: 'website',
+      phrase: 'a missing dedicated website that makes it difficult for customers to find reliable business information and build trust',
+      priority: 1,
+    });
+  } else if (audit && ((audit.score ?? 100) < 60 || audit.status === 'Needs Improvement' || audit.status === 'Poor')) {
+    candidates.push({
+      id: 'website_issues',
+      category: 'website',
+      phrase: 'technical performance and slow mobile loading on your website',
+      priority: 2,
+    });
+  }
+
+  // Instant chat / after-hours WhatsApp responsiveness
+  const hasResponseGap = (strategy?.problems && strategy.problems.some((p) => p.category === 'response')) ||
+    (explicitProblems && explicitProblems.some((p) => p.category === 'response')) ||
+    (audit?.hasWebsite && !/whatsapp|chat|tidio|tawk/i.test((audit?.issues || []).join(' ') + (audit?.techStack || []).join(' ')));
+  if (hasResponseGap) {
+    candidates.push({
+      id: 'response',
+      category: 'response',
+      phrase: 'delayed WhatsApp response options that may cause potential customers to contact competitors',
+      priority: 3,
+    });
+  }
+
+  // Competitor review & local visibility gap
+  const hasCompetitorGap = (strategy?.problems && strategy.problems.some((p) => p.category === 'reputation')) ||
+    (competitors.some((c) => Number(c.reviews) > 20));
+  if (hasCompetitorGap) {
+    candidates.push({
+      id: 'reputation',
+      category: 'reputation',
+      phrase: 'lower local search visibility compared to nearby competitors who hold a higher review volume',
+      priority: 4,
+    });
+  }
+
+  // Service details transparency
+  if (strategy?.problems && strategy.problems.some((p) => p.category === 'information')) {
+    candidates.push({
+      id: 'information',
+      category: 'information',
+      phrase: 'missing or incomplete online service and pricing information',
+      priority: 5,
+    });
+  }
+
+  // Sort and select top 2 or 3
+  candidates.sort((a, b) => a.priority - b.priority);
+  const selected = candidates.slice(0, 3);
+  if (selected.length < 2) {
+    if (!selected.some((s) => s.id === 'response')) {
+      selected.push({
+        id: 'response',
+        category: 'response',
+        phrase: 'delayed response options during off-hours that could lead potential customers to contact competitors',
+        priority: 3,
+      });
+    }
+  }
+
+  const phrases = selected.map((s) => s.phrase);
+  let problemsJoined = '';
+  if (phrases.length === 2) {
+    problemsJoined = `${phrases[0]} and ${phrases[1]}`;
+  } else if (phrases.length >= 3) {
+    problemsJoined = `${phrases[0]}, ${phrases[1]}, and ${phrases[2]}`;
+  } else {
+    problemsJoined = phrases[0] || 'areas where customer communication can be improved';
+  }
+
+  const researchParagraph = `${researchOpener} I noticed a few potential areas for improvement, including ${problemsJoined}.`;
+
+  // 3. Potential Business Impact
+  const selectedCategories = selected.map((s) => s.category);
+  const impactParagraph = buildImpactSentence(selectedCategories, audienceNoun, businessNoun);
+
+  // 4. Relevant Services based on user's actual services
+  const pool = availableServices.length > 0 ? availableServices : ['Website Development', 'WhatsApp Automation', 'SEO'];
+  const servicesParagraph = buildServicesClause(selectedCategories, pool, businessNoun);
+
+  // 5. Soft Close
+  const closingQuestion = 'Would you be interested in discussing them?';
+
+  const fullMessage = [
+    intro,
+    researchParagraph,
+    impactParagraph,
+    servicesParagraph,
+    closingQuestion,
+  ].join('\n\n');
+
+  return cleanSenderIntro(fullMessage, identity);
 }
 
 function serviceDetails(service: string, niche: string): { howItWorks: string; impact: string; timeline: string } {
@@ -402,9 +688,22 @@ function buildDeterministicPlan(
   const opening = `${identity.emailOpening}. I was researching ${request.niche} in ${request.area} and noticed ${place.title} has a strong reputation, but also a few practical opportunities to capture more patient inquiries.`;
   const closing = 'Would you be open to a 5-minute call or a quick reply so I can share 2 specific improvements for your practice?';
 
-  // WhatsApp draft: clean, natural single introduction tailored for WhatsApp
-  const rawWhatsapp = `Hi ${place.title} team, ${identity.whatsappIntro}. I noticed your practice on Google Maps in ${request.area}. We help local ${request.niche.toLowerCase()} capture more appointments and automate WhatsApp inquiries so you never miss after-hours leads. Would you be open to a quick 3-minute chat on how this works?`;
-  const whatsapp = cleanSenderIntro(rawWhatsapp, identity);
+  // WhatsApp draft: personalized research-backed outreach
+  const whatsapp = generatePersonalizedWhatsAppMessage({
+    leadId: place.placeId,
+    businessName: place.title,
+    category: place.category,
+    niche: request.niche,
+    address: place.address || request.area,
+    audit,
+    socialActivity: activities,
+    competitors,
+    problems,
+    weaknesses,
+    identity,
+    availableServices: services,
+    strategy,
+  });
 
   return {
     score,
@@ -496,10 +795,15 @@ async function modelPlan(
         {
           role: 'system',
           content: `You analyze a local business prospect strictly from supplied facts. Never invent facts. Return JSON with score (0-100), priority (high/medium/low), deal, services (from sender services), weaknesses (array), summary, whatsapp, and if hasEmail is true include subject, opening, closing. Keep tone professional, respectful, and consultative.
-CRITICAL INTRO RULES:
-- The WhatsApp message MUST begin with: "Hi ${place.title} team, ${identity.whatsappIntro}."
-- NEVER repeat the sender name or company. Do NOT write redundant introductions like "I'm X from X" or "Hi, I'm from X. I'm X from X".
-- Use the sender identity exactly once naturally.`,
+
+CRITICAL WHATSAPP OUTREACH RULES:
+- Structure the WhatsApp message into 5 concise, paragraph-separated sections:
+  1. Introduction: Begin with "${identity.directIntro}". NEVER repeat the sender name or company.
+  2. Research Summary & Problems: Briefly explain that you took some time to review their business/clinic online presence. Mention 2 or 3 of the most relevant problems actually identified in the supplied facts (e.g. delayed WhatsApp responses, missing or poorly developed website, inactive social media, lack of convenient online appointment-booking options).
+  3. Potential Business Impact: Briefly explain why these problems matter (e.g., making it harder for potential customers/patients to reach them, learn about services, or choose them over competitors). Never make unsupported claims about revenue or actual losses.
+  4. Relevant Solutions: Naturally introduce how your team helps businesses using 1 or 2 relevant services from the sender's actual available services: ${JSON.stringify(request.services)}, and offer to share a few ideas.
+  5. Soft Closing: "Would you be interested in discussing them?"
+- Avoid generic marketing hype or long walls of text.`,
         },
         { role: 'user', content: JSON.stringify(prompt) },
       ],

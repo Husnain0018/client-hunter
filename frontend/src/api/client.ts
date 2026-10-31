@@ -11,6 +11,21 @@ import type {
   Run,
   RunEvent,
   SearchForm,
+  CareerProfile,
+  JobListing,
+  StoredResume,
+  ResumeAnalysis,
+  GeneratedResume,
+  JobApplication,
+  JobApplicationStatus,
+  JobNotification,
+  JobDiscoveryConfig,
+  PlatformStatus,
+  JobSyncStatusInfo,
+  JobApplicationEmailRecord,
+  EmployerResponseRecord,
+  JobDiscoveryStats,
+  JobSyncLogRecord,
 } from '../types';
 
 const API = (import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8787').replace(/\/$/, '');
@@ -95,7 +110,17 @@ async function request<T>(path: string, init: RequestInit = {}, isRetry = false)
   try { body = text ? JSON.parse(text) : {}; } catch { body = { error: `Server returned HTTP ${response.status}.` }; }
 
   if (!response.ok) {
-    const errorMsg = (body as { error?: string }).error || `Request failed (HTTP ${response.status}).`;
+    const parsedBody = body as any;
+    let errorMsg = `Request failed (HTTP ${response.status}).`;
+    if (parsedBody && typeof parsedBody === 'object') {
+      if (typeof parsedBody.error === 'string' && parsedBody.error && parsedBody.error !== 'Not Found' && parsedBody.error !== 'Bad Request' && parsedBody.error !== 'Internal Server Error') {
+        errorMsg = parsedBody.error;
+      } else if (typeof parsedBody.message === 'string' && parsedBody.message) {
+        errorMsg = parsedBody.message;
+      } else if (typeof parsedBody.error === 'string' && parsedBody.error) {
+        errorMsg = parsedBody.error;
+      }
+    }
 
     // Handle 401 Unauthorized / Expired / Invalid session
     if (response.status === 401 && !path.startsWith('/api/auth/session') && !isRetry) {
@@ -232,13 +257,81 @@ export const api = {
       body: JSON.stringify(dealInfo),
     });
   },
+  linkUnmatchedClientToLead(
+    unmatchedLeadId: string,
+    targetLeadId: string
+  ): Promise<{ ok: boolean; client: ClientConversation; stats: ClientHandlerStats }> {
+    return request(`/api/clients/${encodeURIComponent(unmatchedLeadId)}/link-lead`, {
+      method: 'POST',
+      body: JSON.stringify({ targetLeadId }),
+    });
+  },
+  subscribeToClientEvents(onEvent: (event: any) => void): () => void {
+    const token = localStorage.getItem(TOKEN_KEY) || '';
+    const sseUrl = `${API}/api/clients/events?token=${encodeURIComponent(token)}`;
+    let eventSource: EventSource | null = null;
+    try {
+      eventSource = new EventSource(sseUrl);
+      eventSource.onmessage = (e) => {
+        try {
+          const data = JSON.parse(e.data);
+          onEvent(data);
+        } catch {
+          // ignore malformed SSE payloads
+        }
+      };
+    } catch {
+      // fallback polling handles updates if EventSource fails
+    }
+    return () => {
+      if (eventSource) {
+        eventSource.close();
+        eventSource = null;
+      }
+    };
+  },
+  getClientHandlerSettings(): Promise<{
+    ok: boolean;
+    settings: { dealNotificationPhone: string; dealNotificationsEnabled?: boolean };
+    whatsappReady?: boolean;
+    whatsappState?: string;
+  }> {
+    return request('/api/client-handler/settings');
+  },
+  saveClientHandlerSettings(
+    dealNotificationPhone: string,
+    dealNotificationsEnabled?: boolean
+  ): Promise<{
+    ok: boolean;
+    message?: string;
+    settings: { dealNotificationPhone: string; dealNotificationsEnabled?: boolean };
+  }> {
+    return request('/api/client-handler/settings', {
+      method: 'POST',
+      body: JSON.stringify({ dealNotificationPhone, dealNotificationsEnabled }),
+    });
+  },
+  testClientHandlerNotification(phone?: string): Promise<{
+    ok: boolean;
+    message?: string;
+    sent?: { providerMessageId: string; status: string; phone: string; timestamp: string };
+    error?: string;
+  }> {
+    return request('/api/client-handler/test-notification', {
+      method: 'POST',
+      body: JSON.stringify({ phone }),
+    });
+  },
 
   // Direct Baileys WhatsApp Connection Methods
   getWhatsAppStatus(): Promise<{ ok: boolean; status: BaileysStatusInfo }> {
     return request('/api/whatsapp/status');
   },
-  connectWhatsApp(): Promise<{ ok: boolean; status: BaileysStatusInfo }> {
-    return request('/api/whatsapp/connect', { method: 'POST', body: '{}' });
+  connectWhatsApp(options?: { forceNewQr?: boolean }): Promise<{ ok: boolean; status: BaileysStatusInfo }> {
+    return request('/api/whatsapp/connect', {
+      method: 'POST',
+      body: JSON.stringify(options || {}),
+    });
   },
   disconnectWhatsApp(): Promise<{ ok: boolean; status: BaileysStatusInfo }> {
     return request('/api/whatsapp/disconnect', { method: 'POST', body: '{}' });
@@ -246,8 +339,11 @@ export const api = {
   logoutWhatsApp(): Promise<{ ok: boolean; status: BaileysStatusInfo }> {
     return request('/api/whatsapp/logout', { method: 'POST', body: '{}' });
   },
-  restartWhatsApp(): Promise<{ ok: boolean; status: BaileysStatusInfo }> {
-    return request('/api/whatsapp/restart', { method: 'POST', body: '{}' });
+  restartWhatsApp(options?: { forceNewQr?: boolean }): Promise<{ ok: boolean; status: BaileysStatusInfo }> {
+    return request('/api/whatsapp/restart', {
+      method: 'POST',
+      body: JSON.stringify(options || {}),
+    });
   },
   subscribeWhatsAppEvents(onUpdate: (status: BaileysStatusInfo) => void): () => void {
     const token = localStorage.getItem(TOKEN_KEY) || '';
@@ -256,7 +352,7 @@ export const api = {
     let pollInterval: any = null;
     let isClosed = false;
 
-    const startPolling = () => {
+    const startPolling = (intervalMs = 2000) => {
       if (pollInterval || isClosed) return;
       pollInterval = setInterval(async () => {
         try {
@@ -265,8 +361,12 @@ export const api = {
         } catch {
           // ignore transient poll failure
         }
-      }, 3000);
+      }, intervalMs);
     };
+
+    // Always run a 2-second status sync alongside SSE so QR codes and state transitions
+    // are guaranteed to appear immediately even if SSE is buffered or interrupted.
+    startPolling(2000);
 
     try {
       eventSource = new EventSource(sseUrl);
@@ -279,11 +379,10 @@ export const api = {
         }
       };
       eventSource.onerror = () => {
-        // Switch to polling if SSE has an issue
-        startPolling();
+        startPolling(2000);
       };
     } catch {
-      startPolling();
+      startPolling(2000);
     }
 
     return () => {
@@ -298,4 +397,302 @@ export const api = {
       }
     };
   },
+
+  // ==========================================
+  // AI Job Finder & Career Assistant
+  // ==========================================
+  getCareerProfile: () => request<{ ok: boolean; profile: CareerProfile }>('/api/career/profile'),
+
+  updateCareerProfile: (profile: Partial<CareerProfile>) =>
+    request<{ ok: boolean; profile: CareerProfile }>('/api/career/profile', {
+      method: 'PUT',
+      body: JSON.stringify(profile),
+    }),
+
+  getJobDiscoveryConfig: () => request<{ ok: boolean; config: JobDiscoveryConfig }>('/api/career/config'),
+
+  updateJobDiscoveryConfig: (config: Partial<JobDiscoveryConfig>) =>
+    request<{ ok: boolean; config: JobDiscoveryConfig }>('/api/career/config', {
+      method: 'PUT',
+      body: JSON.stringify(config),
+    }),
+
+  getJobPlatforms: () => request<{ ok: boolean; platforms: PlatformStatus[] }>('/api/career/platforms'),
+
+  getJobs: (params?: {
+    query?: string;
+    country?: string;
+    workplaceType?: string;
+    employmentType?: string;
+    experienceLevel?: string;
+    platform?: string;
+    minSalary?: number;
+    dateFilter?: string;
+    customStartDate?: string;
+    customEndDate?: string;
+    savedOnly?: boolean;
+    appliedOnly?: boolean;
+    limit?: number;
+    page?: number;
+  }) => {
+    const searchParams = new URLSearchParams();
+    if (params) {
+      Object.entries(params).forEach(([key, val]) => {
+        if (val !== undefined && val !== null && val !== '') {
+          searchParams.append(key, String(val));
+        }
+      });
+    }
+    const queryStr = searchParams.toString();
+    return request<{ ok: boolean; total: number; jobs: JobListing[] }>(`/api/career/jobs${queryStr ? `?${queryStr}` : ''}`);
+  },
+
+  getJobDiscoveryStats: () =>
+    request<{ ok: boolean; stats: JobDiscoveryStats }>('/api/career/jobs/stats'),
+
+  getJobSyncHistory: (limit = 30) =>
+    request<{ ok: boolean; logs: JobSyncLogRecord[] }>(`/api/career/jobs/sync-history?limit=${limit}`),
+
+  toggleJobScheduler: (payload: { enabled?: boolean; intervalHours?: number }) =>
+    request<{ ok: boolean; config: JobDiscoveryConfig; schedulerStatus: 'active' | 'paused' }>('/api/career/scheduler/toggle', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+
+  syncJobs: () =>
+    request<{
+      ok: boolean;
+      count: number;
+      newSaved: number;
+      duplicatesSkipped: number;
+      sourcesChecked: string[];
+      sourcesFailed: string[];
+      status: JobSyncStatusInfo;
+      message: string;
+      error?: string;
+    }>('/api/career/jobs/sync', { method: 'POST' }),
+
+  getJobSyncStatus: () => request<{ ok: boolean; status: JobSyncStatusInfo }>('/api/career/jobs/sync-status'),
+
+  getJobDetails: (id: string) => request<{ ok: boolean; job: JobListing }>(`/api/career/jobs/${id}`),
+
+  toggleSaveJob: (id: string) => request<{ ok: boolean; isSaved: boolean }>(`/api/career/jobs/${id}/save`, { method: 'POST' }),
+
+  getResumes: () => request<{ ok: boolean; resumes: StoredResume[] }>('/api/career/resumes'),
+
+  uploadResume: async (file: File) => {
+    const token = localStorage.getItem(TOKEN_KEY);
+    const formData = new FormData();
+    formData.append('file', file);
+    const res = await fetch(`${API}/api/career/resumes/upload`, {
+      method: 'POST',
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      body: formData,
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data?.error || 'Failed to upload resume');
+    return data as { ok: boolean; resume: StoredResume; analysis: ResumeAnalysis };
+  },
+
+  analyzeResume: (id: string) => request<{ ok: boolean; analysis: ResumeAnalysis }>(`/api/career/resumes/${id}/analyze`, { method: 'POST' }),
+
+  generateTailoredResume: (templateType: string, customProfile?: Partial<CareerProfile>) =>
+    request<{ ok: boolean; generatedResume: GeneratedResume }>('/api/career/resumes/generate', {
+      method: 'POST',
+      body: JSON.stringify({ templateType, customProfile }),
+    }),
+
+  getGeneratedResumes: (resumeId?: string) =>
+    request<{ ok: boolean; generatedResumes: GeneratedResume[] }>(`/api/career/resumes/generated${resumeId ? `?resumeId=${resumeId}` : ''}`),
+
+  getGeneratedResume: (id: string) =>
+    request<{ ok: boolean; generatedResume: GeneratedResume }>(`/api/career/resumes/generated/${id}`),
+
+  updateGeneratedResume: (id: string, updates: Partial<GeneratedResume>) =>
+    request<{ ok: boolean; generatedResume: GeneratedResume }>(`/api/career/resumes/generated/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(updates),
+    }),
+
+  deleteResume: (id: string) =>
+    request<{ ok: boolean; deleted: boolean }>(`/api/career/resumes/${id}`, { method: 'DELETE' }),
+
+  getResumeFileUrl: (id: string) => {
+    const token = localStorage.getItem(TOKEN_KEY);
+    return `${API}/api/career/resumes/${id}/file${token ? `?token=${encodeURIComponent(token)}` : ''}`;
+  },
+
+  getGeneratedResumeDocxUrl: (id: string) => {
+    const token = localStorage.getItem(TOKEN_KEY);
+    return `${API}/api/career/resumes/generated/${id}/docx${token ? `?token=${encodeURIComponent(token)}` : ''}`;
+  },
+
+  downloadGeneratedResumeDocx: async (id: string, filename = 'Resume.docx') => {
+    const token = localStorage.getItem(TOKEN_KEY);
+    const url = `${API}/api/career/resumes/generated/${id}/docx${token ? `?token=${encodeURIComponent(token)}` : ''}`;
+    const res = await fetch(url, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    if (!res.ok) {
+      throw new Error(`Failed to download DOCX: HTTP ${res.status}`);
+    }
+    const blob = await res.blob();
+    const blobUrl = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = blobUrl;
+    a.download = filename.endsWith('.docx') ? filename : `${filename}.docx`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
+  },
+
+  getJobRecipientEmail: (jobId: string, refresh = false) =>
+    request<{
+      ok: boolean;
+      discovery: {
+        found: boolean;
+        email: string;
+        source: string;
+        sourceUrl?: string;
+        companyName?: string;
+        companyWebsite?: string;
+        verificationStatus: 'verified' | 'publicly_listed' | 'unverified' | 'not_found';
+        verificationLabel?: string;
+        emailType?: 'recruitment' | 'hr' | 'company_contact' | 'general';
+        portalUrl?: string;
+        originalListingUrl?: string;
+        sourcesChecked?: string[];
+        alternativeEmails?: Array<{
+          email: string;
+          source: string;
+          sourceUrl: string;
+          emailType: 'recruitment' | 'hr' | 'company_contact' | 'general';
+        }>;
+        notes?: string;
+      };
+    }>(`/api/career/jobs/${jobId}/recipient-email${refresh ? '?refresh=true' : ''}`),
+
+  getJobApplicationEmail: (jobId: string) =>
+    request<{
+      ok: boolean;
+      email: {
+        subject: string;
+        html: string;
+        text: string;
+        matchedSkills?: string[];
+        recipientGreeting?: string;
+      };
+    }>(`/api/career/jobs/${jobId}/application-email`),
+
+  renderJobApplicationEmail: (jobId: string, payload: { subject: string; body: string }) =>
+    request<{
+      ok: boolean;
+      html: string;
+    }>(`/api/career/jobs/${jobId}/render-email`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+
+  getJobApplications: () =>
+    request<{ ok: boolean; applications: JobApplication[]; stats: Record<string, number>; todayCount: number }>('/api/career/applications'),
+
+  prepareJobApplication: (jobId: string) =>
+    request<{
+      ok: boolean;
+      package: {
+        job: JobListing;
+        coverLetter: string;
+        tailoredAnswers: Record<string, string>;
+        readyToApply: boolean;
+        warnings?: string[];
+      };
+    }>('/api/career/applications/prepare', {
+      method: 'POST',
+      body: JSON.stringify({ jobId }),
+    }),
+
+  submitJobApplication: (payload: {
+    jobId: string;
+    mode: 'manual' | 'automatic';
+    customCoverLetter?: string;
+    customAnswers?: Record<string, string>;
+  }) =>
+    request<{ ok: boolean; application: JobApplication }>('/api/career/applications/apply', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+
+  sendApplicationEmail: (payload: {
+    jobId: string;
+    recipientEmail: string;
+    senderEmail: string;
+    subject: string;
+    body: string;
+    htmlBody?: string;
+    bodyEdited?: boolean;
+    resumeId?: string;
+    resumeName?: string;
+    recipientEmailSource?: string;
+  }) =>
+    request<{
+      ok: boolean;
+      deliveryStatus: 'sent' | 'delivery_confirmed' | 'failed';
+      application: JobApplication;
+      emailRecord: JobApplicationEmailRecord;
+      attachedResume?: string | null;
+    }>('/api/career/applications/send-email', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+
+  getApplicationEmails: (jobId?: string) =>
+    request<{ ok: boolean; emails: JobApplicationEmailRecord[] }>(`/api/career/applications/emails${jobId ? `?jobId=${jobId}` : ''}`),
+
+  getAiEmailReply: (applicationId: string, employerMessage: string) =>
+    request<{
+      ok: boolean;
+      analysis: {
+        category: string;
+        categoryLabel: string;
+        sentiment: string;
+        keyPoints: string[];
+        suggestedReply: string;
+        actionItems: string[];
+      };
+    }>(`/api/career/applications/${applicationId}/ai-reply`, {
+      method: 'POST',
+      body: JSON.stringify({ employerMessage }),
+    }),
+
+  logEmployerResponse: (
+    applicationId: string,
+    payload: {
+      fromEmail: string;
+      subject: string;
+      body: string;
+      category?: string;
+      userReply?: string;
+    }
+  ) =>
+    request<{
+      ok: boolean;
+      responseRecord: EmployerResponseRecord;
+      application: JobApplication;
+    }>(`/api/career/applications/${applicationId}/log-response`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+
+  updateApplicationStatus: (id: string, status: JobApplicationStatus) =>
+    request<{ ok: boolean; application: JobApplication }>(`/api/career/applications/${id}/status`, {
+      method: 'PATCH',
+      body: JSON.stringify({ status }),
+    }),
+
+  getJobNotifications: () => request<{ ok: boolean; notifications: JobNotification[] }>('/api/career/notifications'),
+
+  markJobNotificationRead: (id: string) => request<{ ok: boolean }>(`/api/career/notifications/${id}/read`, { method: 'POST' }),
 };
+
+export const client = api;

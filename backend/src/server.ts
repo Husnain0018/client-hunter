@@ -3,18 +3,20 @@ import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import helmet from '@fastify/helmet';
 import rateLimit from '@fastify/rate-limit';
+import multipart from '@fastify/multipart';
 import { env } from './config/env.js';
 import { Database } from './db/database.js';
 import { authRoutes } from './routes/auth.js';
 import { apiRoutes } from './routes/api.js';
 import { clientHandlerRoutes } from './routes/clientHandler.js';
 import { whatsappRoutes } from './routes/whatsappRoutes.js';
+import { jobRoutes } from './routes/jobRoutes.js';
 import { RunPipeline } from './services/runPipeline.js';
 import { BaileysManager } from './services/baileysManager.js';
 import { hasSavedSession } from './services/baileysAuthState.js';
 
 export function buildApp(customDatabase?: Database) {
-  const app = Fastify({ logger: env.NODE_ENV !== 'test', bodyLimit: 250_000 });
+  const app = Fastify({ logger: env.NODE_ENV !== 'test', bodyLimit: 25 * 1024 * 1024 });
   const database = customDatabase || new Database(env.databasePath);
   const pipeline = new RunPipeline(database);
   app.register(helmet, { global: true, contentSecurityPolicy: false });
@@ -24,8 +26,14 @@ export function buildApp(customDatabase?: Database) {
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'X-Waha-Webhook-Secret'],
   });
+  app.register(multipart, {
+    limits: {
+      fileSize: 25 * 1024 * 1024,
+      files: 1
+    }
+  });
   app.register(rateLimit, { max: 600, timeWindow: '1 minute', keyGenerator: (request) => request.ip });
-  app.addContentTypeParser('application/json', { parseAs: 'string' }, (_req, body: string, done) => {
+  app.addContentTypeParser('application/json', { parseAs: 'string', bodyLimit: 25 * 1024 * 1024 }, (_req, body: string, done) => {
     if (!body || body.trim().length === 0) {
       done(null, {});
       return;
@@ -42,9 +50,16 @@ export function buildApp(customDatabase?: Database) {
   app.register(apiRoutes, { database, pipeline });
   app.register(clientHandlerRoutes, { database });
   app.register(whatsappRoutes, { database });
+  app.register(jobRoutes, { database });
   app.addHook('onClose', async () => {
     try {
       await BaileysManager.getInstance(database).disconnect();
+    } catch {
+      // ignore
+    }
+    try {
+      const { JobDiscoveryScheduler } = await import('./services/jobDiscoveryScheduler.js');
+      JobDiscoveryScheduler.getInstance(database).stop();
     } catch {
       // ignore
     }
@@ -67,12 +82,26 @@ if (process.env.NODE_ENV !== 'test') {
     app.log.info(`Client Hunter backend listening on http://${env.HOST}:${env.PORT}`);
 
     // Auto-resume saved WhatsApp session if credentials exist
-    if (hasSavedSession()) {
+    if (hasSavedSession(database)) {
       app.log.info('Found existing WhatsApp session, reconnecting in background...');
       BaileysManager.getInstance(database).connect().catch((err) => {
         app.log.warn({ err }, 'Background WhatsApp reconnection encountered an error');
       });
     }
+
+    const gracefulShutdown = async (signal: string) => {
+      app.log.info(`Received ${signal}, closing server and WhatsApp connection cleanly...`);
+      try {
+        await BaileysManager.getInstance(database).destroy();
+      } catch {}
+      try {
+        await app.close();
+      } catch {}
+      process.exit(0);
+    };
+
+    process.on('SIGINT', () => void gracefulShutdown('SIGINT'));
+    process.on('SIGTERM', () => void gracefulShutdown('SIGTERM'));
   }).catch((error) => {
     app.log.error(error);
     process.exit(1);

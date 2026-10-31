@@ -11,3 +11,4 @@ baileys_session/
 *.db-shm
 *.db-wal
 .DS_Store
+.opencode/

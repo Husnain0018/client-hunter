@@ -63,17 +63,19 @@ describe('Baileys WhatsApp Direct Integration Suite', () => {
   };
 
   it('1. Persists, serializes, and restores Baileys authentication state', async () => {
-    const auth1 = await initPersistentAuthState();
+    const auth1 = await initPersistentAuthState(db);
     auth1.clearAuthState();
-    expect(hasSavedSession()).toBe(false);
+    expect(hasSavedSession(db)).toBe(false);
 
     expect(auth1.state.creds).toBeDefined();
     expect(auth1.state.creds.noiseKey).toBeDefined();
     expect(Buffer.isBuffer(auth1.state.creds.noiseKey.private)).toBe(true);
 
-    // Save creds
+    // Save creds with registered = true to simulate completed pairing
+    auth1.state.creds.registered = true;
+    auth1.state.creds.me = { id: '923001234567@s.whatsapp.net', name: 'Test Account' };
     await auth1.saveCreds();
-    expect(hasSavedSession()).toBe(true);
+    expect(hasSavedSession(db)).toBe(true);
 
     // Save cryptographic signal keys
     const dummyKey = { key: Buffer.from('baileys-crypto-test-secret-key-1234') };
@@ -84,8 +86,9 @@ describe('Baileys WhatsApp Direct Integration Suite', () => {
     });
 
     // Simulate server restart by creating new auth state instance
-    const auth2 = await initPersistentAuthState();
+    const auth2 = await initPersistentAuthState(db);
     expect(auth2.state.creds.noiseKey.private.equals(auth1.state.creds.noiseKey.private)).toBe(true);
+    expect(auth2.state.creds.registered).toBe(true);
 
     const retrievedKeys = await auth2.state.keys.get('pre-key', ['101']);
     expect(retrievedKeys['101']).toBeDefined();
@@ -94,12 +97,12 @@ describe('Baileys WhatsApp Direct Integration Suite', () => {
 
     // Clean session on logout
     auth2.clearAuthState();
-    expect(hasSavedSession()).toBe(false);
+    expect(hasSavedSession(db)).toBe(false);
   });
 
   it('2. Maintains singleton connection state and prevents conflicting concurrent connects', async () => {
     const status = manager.getStatus();
-    expect(status.state).toBe('not_connected');
+    expect(['not_connected', 'disconnected']).toContain(status.state);
     expect(status.qr).toBeNull();
     expect(status.isReady).toBe(false);
 
@@ -242,5 +245,211 @@ describe('Baileys WhatsApp Direct Integration Suite', () => {
     expect(logoutRes.json().status.state).toBe('logged_out');
 
     await app.close();
+  });
+
+  it('7. Preserves authenticated session on transient network disconnects without asking for QR', async () => {
+    // Simulate active authenticated credentials
+    const auth = await initPersistentAuthState(db);
+    auth.state.creds.registered = true;
+    auth.state.creds.me = { id: '923001234567@s.whatsapp.net', name: 'Dr. Dental Office' };
+    await auth.saveCreds();
+
+    expect(hasSavedSession(db)).toBe(true);
+
+    const testManager = new BaileysManager(db);
+    const status = testManager.getStatus();
+    expect(status.hasSavedSession).toBe(true);
+
+    // Simulate transient connection drop (e.g. 428 connectionClosed or 408 timedOut)
+    (testManager as any).handleConnectionClose({
+      error: { output: { statusCode: 428 }, message: 'Connection Closed by server' },
+    });
+
+    // Verify it transitioned to reconnecting / temporarily_disconnected without deleting credentials
+    const reconnectingStatus = testManager.getStatus();
+    expect(['reconnecting', 'temporarily_disconnected']).toContain(reconnectingStatus.state);
+    expect(hasSavedSession(db)).toBe(true);
+    expect(reconnectingStatus.qr).toBeNull(); // Must NOT emit QR code for saved session!
+
+    // Clean up
+    await testManager.destroy();
+    auth.clearAuthState();
+    expect(hasSavedSession(db)).toBe(false);
+  });
+
+  it('8. Never misclassifies an unregistered initial connection 401 failure as session_expired', async () => {
+    const auth = await initPersistentAuthState(db, { forceFresh: true });
+    auth.clearAuthState();
+    expect(hasSavedSession(db)).toBe(false);
+
+    const freshManager = new BaileysManager(db);
+    (freshManager as any).activeAttemptHadSavedSession = false;
+    (freshManager as any).qrRetryCount = 3; // simulate retries exhausted
+
+    (freshManager as any).handleConnectionClose({
+      error: { output: { statusCode: 401 }, message: 'Connection Failure' },
+    });
+
+    const status = freshManager.getStatus();
+    expect(status.state).toBe('connection_failed');
+    expect(status.state).not.toBe('session_expired');
+    expect(status.error).not.toContain('session expired');
+    await freshManager.destroy();
+  });
+
+  it('9. Clears dead credentials when a saved session expires (401) so subsequent connect generates a fresh QR', async () => {
+    const auth = await initPersistentAuthState(db, { forceFresh: true });
+    auth.state.creds.me = { id: '923224627528:12@s.whatsapp.net', name: 'Unitech solution' };
+    (auth.state.creds as any).account = { details: Buffer.from('test') };
+    await auth.saveCreds();
+    expect(hasSavedSession(db)).toBe(true);
+
+    const sessionManager = new BaileysManager(db);
+    expect(sessionManager.getStatus().hasSavedSession).toBe(true);
+
+    // Simulate background 401 loggedOut from phone unlinking
+    (sessionManager as any).userInitiatedConnect = false;
+    (sessionManager as any).handleConnectionClose({
+      error: { output: { statusCode: 401 }, message: 'Logged Out' },
+    });
+
+    const expiredStatus = sessionManager.getStatus();
+    expect(expiredStatus.state).toBe('session_expired');
+    // Stale credentials must be wiped immediately so next Connect generates a fresh QR code
+    expect(hasSavedSession(db)).toBe(false);
+    expect(expiredStatus.hasSavedSession).toBe(false);
+
+    await sessionManager.destroy();
+  });
+
+  it('10. Resolves Baileys v7 @lid Linked Identity JIDs to registered lead phone numbers and triggers AI reply', async () => {
+    // Save Yaseen Children Care Clinic lead with phone +92 336 4013415
+    const yaseenLead: Lead = {
+      ...sampleLead,
+      leadId: 'Ld09bb64dd7ed76c2107b',
+      businessName: 'Yaseen Children Care Clinic | Dr Muhammad Sufyan Yaseen',
+      phone: '+92 336 4013415',
+      whatsappLink: 'https://wa.me/923364013415',
+    };
+    db.saveLead(yaseenLead);
+
+    // Store LID-to-Phone reverse mapping in baileys_auth (exact format used by Baileys v7)
+    db.saveLidPhoneMapping('154773928038590@lid', '923364013415@s.whatsapp.net');
+    expect(db.resolvePhoneFromLid('154773928038590@lid')).toBe('923364013415');
+
+    // Verify findLeadByPhone resolves raw @lid JID directly to Yaseen Children Care Clinic
+    const matchedLead = db.findLeadByPhone('154773928038590@lid');
+    expect(matchedLead).not.toBeNull();
+    expect(matchedLead?.leadId).toBe('Ld09bb64dd7ed76c2107b');
+
+    // Simulate Baileys messages.upsert arriving from 154773928038590@lid
+    const lidManager = new BaileysManager(db);
+    lidManager.setMessageHandler(async (msg) => {
+      await service.handleIncomingWhatsAppMessage(msg);
+    });
+
+    await (lidManager as any).handleMessagesUpsert({
+      type: 'notify',
+      messages: [
+        {
+          key: {
+            remoteJid: '154773928038590@lid',
+            fromMe: false,
+            id: 'A56048D78B11F5527BBA04EE2EDB648F',
+          },
+          pushName: 'Dr Muhammad Sufyan Yaseen',
+          messageTimestamp: Math.floor(Date.now() / 1000),
+          message: {
+            conversation: 'Yes, what problems did you find on our clinic profile and how much does your setup cost?',
+          },
+        },
+      ],
+    });
+
+    // Verify incoming client message AND AI auto-reply were both saved to Yaseen Children Care Clinic
+    const msgs = db.getConversationMessages('Ld09bb64dd7ed76c2107b');
+    const clientMsg = msgs.find((m) => m.sender === 'client' && m.providerMessageId === 'A56048D78B11F5527BBA04EE2EDB648F');
+    const aiReply = msgs.find((m) => m.sender === 'assistant');
+
+    expect(clientMsg).toBeDefined();
+    expect(clientMsg?.text).toContain('what problems did you find');
+    expect(aiReply).toBeDefined();
+    expect(aiReply?.text.length).toBeGreaterThan(20);
+
+    await lidManager.destroy();
+  });
+
+  it('11. Unwraps ephemeral, edited, media, document, voice note, and interactive WhatsApp messages', () => {
+    const lidManager = new BaileysManager(db);
+
+    // 1. Ephemeral wrapped extendedTextMessage
+    const eph = lidManager.extractIncomingContent({
+      ephemeralMessage: {
+        message: {
+          extendedTextMessage: {
+            text: 'Check our website https://lahoresmiles.example',
+          },
+        },
+      },
+    });
+    expect(eph.text).toBe('Check our website https://lahoresmiles.example');
+    expect(eph.messageType).toBe('link');
+
+    // 2. Image with caption
+    const img = lidManager.extractIncomingContent({
+      imageMessage: {
+        caption: 'Here is our clinic reception card',
+        mimetype: 'image/jpeg',
+      },
+    });
+    expect(img.messageType).toBe('image');
+    expect(img.text).toContain('Here is our clinic reception card');
+    expect(img.attachments?.[0]?.type).toBe('image');
+
+    // 3. Document PDF
+    const doc = lidManager.extractIncomingContent({
+      documentMessage: {
+        fileName: 'Clinic_Services_Price_List.pdf',
+        mimetype: 'application/pdf',
+      },
+    });
+    expect(doc.messageType).toBe('document');
+    expect(doc.text).toContain('Clinic_Services_Price_List.pdf');
+
+    // 4. Voice note (audioMessage with ptt: true)
+    const voice = lidManager.extractIncomingContent({
+      audioMessage: {
+        ptt: true,
+        seconds: 14,
+        mimetype: 'audio/ogg; codecs=opus',
+      },
+    });
+    expect(voice.messageType).toBe('voice');
+    expect(voice.text).toContain('14s');
+  });
+
+  it('12. Preserves incoming messages from unmatched senders and supports linking them to an existing lead', async () => {
+    const unknownRes = await service.handleIncomingWhatsAppMessage({
+      id: 'baileys_unmatched_msg_777',
+      from: '923459998877',
+      rawJid: '923459998877@s.whatsapp.net',
+      pushName: 'Dr. Kamran Reception',
+      text: 'Hi, this is Lahore Smile Studio messaging from our secondary reception WhatsApp number. Tell me more about your booking system.',
+      timestamp: new Date().toISOString(),
+    });
+
+    expect(unknownRes.handled).toBe(true);
+    expect(unknownRes.unmatchedContact).toBe(true);
+    expect(unknownRes.leadId).toMatch(/^Lwa_/);
+
+    const unmatchedLeadId = unknownRes.leadId!;
+    const unmatchedConv = service.getClient(unmatchedLeadId);
+    expect(unmatchedConv.businessName).toContain('Dr. Kamran Reception');
+    expect(unmatchedConv.messages?.some((m) => m.sender === 'client' && m.text.includes('secondary reception'))).toBe(true);
+
+    // Now link the unmatched contact to existing sampleLead ('lead-dentist-wa')
+    const mergedConv = service.linkUnmatchedLead(unmatchedLeadId, sampleLead.leadId);
+    expect(mergedConv.leadId).toBe(sampleLead.leadId);
+    expect(mergedConv.messages?.some((m) => m.text.includes('secondary reception'))).toBe(true);
   });
 });
