@@ -45,6 +45,18 @@ export function buildApp(customDatabase?: Database) {
       done(err, undefined);
     }
   });
+  app.get('/', async () => ({
+    status: 'online',
+    service: 'client-hunter-backend',
+    message: 'Client Hunter & AI Job Finder Backend is running successfully.',
+    endpoints: {
+      health: '/api/health',
+      auth: '/api/auth/login',
+      jobs: '/api/jobs',
+      whatsapp: '/api/whatsapp/status',
+      clientHandler: '/api/client-handler/conversations',
+    },
+  }));
   app.get('/api/health', async () => ({ ok: true, service: 'client-hunter-backend', time: new Date().toISOString() }));
   app.register(authRoutes);
   app.register(apiRoutes, { database, pipeline });
