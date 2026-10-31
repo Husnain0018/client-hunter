@@ -21,7 +21,10 @@ export function buildApp(customDatabase?: Database) {
   const pipeline = new RunPipeline(database);
   app.register(helmet, { global: true, contentSecurityPolicy: false });
   app.register(cors, {
-    origin: env.FRONTEND_ORIGIN === '*' ? true : [env.FRONTEND_ORIGIN, 'http://localhost:5173', 'http://127.0.0.1:5173'],
+    origin: (origin, cb) => {
+      // Reflect origin so all Vercel previews, production domains, and localhost work seamlessly
+      cb(null, true);
+    },
     credentials: false,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'X-Waha-Webhook-Secret'],
