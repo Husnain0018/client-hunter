@@ -180,7 +180,24 @@ function parsePlace(raw: Record<string, unknown>, request: SearchRequest): MapsP
   const address = String(raw.address ?? raw.street ?? '').trim();
   const phone = String(raw.phone ?? raw.phoneUnformatted ?? '').trim();
   const placeId = String(raw.placeId ?? raw.cid ?? '').trim() || `${title}|${address}`;
-  return { placeId, title, category: String(raw.categoryName ?? request.niche), address, country: request.country, phone, website, rating, reviews, mapsUrl: String(raw.url ?? raw.googleMapsUrl ?? ''), imageUrl: String(raw.imageUrl ?? ''), social };
+
+  // Direct target Google Maps profile link
+  let mapsUrl = '';
+  if (raw.cid) {
+    mapsUrl = `https://www.google.com/maps?cid=${raw.cid}`;
+  } else if (raw.url && String(raw.url).includes('google.com/maps')) {
+    mapsUrl = String(raw.url);
+  } else if (raw.placeId) {
+    mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(title)}&query_place_id=${encodeURIComponent(String(raw.placeId))}`;
+  } else if (raw.googleMapsUrl) {
+    mapsUrl = String(raw.googleMapsUrl);
+  } else if (address) {
+    mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${title}, ${address}`)}`;
+  } else {
+    mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${title}, ${request.area}, ${request.country}`)}`;
+  }
+
+  return { placeId, title, category: String(raw.categoryName ?? request.niche), address, country: request.country, phone, website, rating, reviews, mapsUrl, imageUrl: String(raw.imageUrl ?? ''), social };
 }
 
 export async function searchMaps(request: SearchRequest): Promise<{ places: MapsPlace[]; source: 'apify' | 'fallback'; warning?: string }> {
