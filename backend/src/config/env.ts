@@ -14,7 +14,7 @@ const schema = z.object({
   FRONTEND_ORIGIN: z.string().default('http://localhost:5173'),
   AUTH_SECRET: z.string().min(16).default('local-development-only-change-me'),
   AUTH_TOKEN_EXPIRES_IN: z.string().default('30d'),
-  CLIENT_HUNTER_ACCESS_CODE: z.string().min(3).default('change-me-now'),
+  CLIENT_HUNTER_ACCESS_CODE: z.string().min(3).default('hunter2026!secret'),
   DATABASE_PATH: z.string().default('./data/client-hunter.sqlite'),
   APIFY_API_TOKEN: z.string().optional().default(''),
   OPENAI_API_KEY: z.string().optional().default(''),
