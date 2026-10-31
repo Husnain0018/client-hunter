@@ -9,9 +9,9 @@ const boolEnv = z.preprocess((value) => {
 
 const schema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
-  HOST: z.string().default('127.0.0.1'),
+  HOST: z.string().default(process.env.NODE_ENV === 'production' ? '0.0.0.0' : '127.0.0.1'),
   PORT: z.coerce.number().int().min(1).max(65535).default(8787),
-  FRONTEND_ORIGIN: z.string().url().default('http://localhost:5173'),
+  FRONTEND_ORIGIN: z.string().default('http://localhost:5173'),
   AUTH_SECRET: z.string().min(16).default('local-development-only-change-me'),
   AUTH_TOKEN_EXPIRES_IN: z.string().default('30d'),
   CLIENT_HUNTER_ACCESS_CODE: z.string().min(3).default('change-me-now'),
